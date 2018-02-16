@@ -281,6 +281,11 @@
       "hash": "Qmc14vuKyGqX27RvBhekYytxSFJpaEgQVuVJgKSm69MEix",
       "name": "go-smux-multiplex",
       "version": "3.0.5"
+    },
+    {
+      "hash": "Qmdm5sm2xHCXNaWdxpjhFeStvSNMRhKQkqpBX7aDcqXtfT",
+      "name": "go-libp2p-kad-dht",
+      "version": "3.0.15"
     }
   ],
   "gxVersion": "0.4.0",
