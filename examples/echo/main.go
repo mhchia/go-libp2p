@@ -11,16 +11,20 @@ import (
 	"log"
 	mrand "math/rand"
 
-	golog "github.com/ipfs/go-log"
 	libp2p "github.com/libp2p/go-libp2p"
-	crypto "github.com/libp2p/go-libp2p-crypto"
-	host "github.com/libp2p/go-libp2p-host"
-	net "github.com/libp2p/go-libp2p-net"
-	peer "github.com/libp2p/go-libp2p-peer"
-	pstore "github.com/libp2p/go-libp2p-peerstore"
-	ma "github.com/multiformats/go-multiaddr"
-	gologging "github.com/whyrusleeping/go-logging"
+	gologging "gx/ipfs/QmQvJiADDe7JR4m968MwXobTCCzUqQkP87aRHe29MEBGHV/go-logging"
+	golog "gx/ipfs/QmTG23dvpBCBjqQwyDxV8CQT6jmS4PSftNr1VqHhE3MLy7/go-log"
+	ma "gx/ipfs/QmWWQ2Txc2c6tqjsBpzg5Ar652cHPGNsQQp2SejkNmkUMb/go-multiaddr"
+	net "gx/ipfs/QmXoz9o2PT3tEzf7hicegwex5UgVP54n3k82K7jrWFyN86/go-libp2p-net"
+	peer "gx/ipfs/QmcJukH2sAFjY3HdBKq35WDzWoL3UUu2gt9wdfqZTUyM74/go-libp2p-peer"
+	pstore "gx/ipfs/QmdeiKhUy1TVGBaKxt7y1QmBDLBdisSrLJ1x58Eoj4PXUh/go-libp2p-peerstore"
+	crypto "gx/ipfs/Qme1knMqwt1hKZbc1BmQFmnm9f36nyQGwXxPGVpVJ9rMK5/go-libp2p-crypto"
+	host "gx/ipfs/QmfZTdmunzKzAGJrSvXXQbQ5kLLUiEMX5vdwux7iXkdk7D/go-libp2p-host"
 )
+
+// pattern: /protocol-name/request-or-response-message/version
+const addPeerRequest = "/addPeer/addpeerreq/0.0.1"
+const addPeerResponse = "/addPeer/addpeerresp/0.0.1"
 
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
@@ -35,10 +39,13 @@ func makeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error
 	} else {
 		r = mrand.New(mrand.NewSource(randseed))
 	}
+	// for convenience
+	r = mrand.New(mrand.NewSource(randseed))
 
 	// Generate a key pair for this host. We will use it at least
 	// to obtain a valid host ID.
 	priv, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
+	// log.Printf("priv=%s", priv)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +70,7 @@ func makeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error
 	// Now we can build a full multiaddress to reach this host
 	// by encapsulating both addresses:
 	addr := basicHost.Addrs()[0]
+	log.Printf("addr=%s\n", addr)
 	fullAddr := addr.Encapsulate(hostAddr)
 	log.Printf("I am %s\n", fullAddr)
 	if secio {
@@ -74,6 +82,17 @@ func makeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error
 	return basicHost, nil
 }
 
+func printPeers(ps pstore.Peerstore) {
+	for index, peerId := range ps.Peers() {
+		log.Printf(
+			"peer %d: peerId=%s, peerAddrs=%s\n",
+			index,
+			peerId,
+			ps.PeerInfo(peerId).Addrs,
+		)
+	}
+}
+
 func main() {
 	// LibP2P code uses golog to log messages. They log with different
 	// string IDs (i.e. "swarm"). We can control the verbosity level for
@@ -81,12 +100,20 @@ func main() {
 	golog.SetAllLoggers(gologging.INFO) // Change to DEBUG for extra info
 
 	// Parse options from the command line
+	nodeNumber := flag.Int("n", 0, "which node")
 	listenF := flag.Int("l", 0, "wait for incoming connections")
 	target := flag.String("d", "", "target peer to dial")
 	secio := flag.Bool("secio", false, "enable secio")
 	seed := flag.Int64("seed", 0, "set random seed for id generation")
 	flag.Parse()
 
+	*listenF = 10000 + *nodeNumber
+	*seed = int64(*nodeNumber)
+	if *nodeNumber == 0 {
+		*target = ""
+	} else {
+		*target = "/ip4/127.0.0.1/tcp/10000/ipfs/QmS5QmciTXXnCUCyxud5eWFenUMAmvAWSDa1c7dvdXRMZ7"
+	}
 	if *listenF == 0 {
 		log.Fatal("Please provide a port to bind on with -l")
 	}
@@ -99,14 +126,23 @@ func main() {
 
 	// Set a stream handler on host A. /echo/1.0.0 is
 	// a user-defined protocol name.
-	ha.SetStreamHandler("/echo/1.0.0", func(s net.Stream) {
-		log.Println("Got a new stream!")
+	ha.SetStreamHandler(addPeerRequest, func(s net.Stream) {
+		remotePeerId := s.Conn().RemotePeer()
+		remotePeerMultiaddr := s.Conn().RemoteMultiaddr()
+		log.Printf(
+			"Got a new stream! from peerId=%s, peerMultiaddr=%s\n",
+			remotePeerId,
+			remotePeerMultiaddr,
+		)
 		if err := doEcho(s); err != nil {
 			log.Println(err)
 			s.Reset()
 		} else {
 			s.Close()
 		}
+		// TODO: should do other checks to become peer
+		ha.Peerstore().AddAddr(remotePeerId, remotePeerMultiaddr, pstore.PermanentAddrTTL)
+		printPeers(ha.Peerstore())
 	})
 
 	if *target == "" {
@@ -117,17 +153,17 @@ func main() {
 
 	// The following code extracts target's the peer ID from the
 	// given multiaddress
-	ipfsaddr, err := ma.NewMultiaddr(*target)
+	ipfsaddr, err := ma.NewMultiaddr(*target) // ipfsaddr=/ip4/127.0.0.1/tcp/10000/ipfs/QmVmDaabYcS3pn23KaFjkdw6hkReUUma8sBKqSDHrPYPd2
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
+	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS) // pid=QmVmDaabYcS3pn23KaFjkdw6hkReUUma8sBKqSDHrPYPd2
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	peerid, err := peer.IDB58Decode(pid)
+	peerid, err := peer.IDB58Decode(pid) // peerid=<peer.ID VmDaab>
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -135,18 +171,20 @@ func main() {
 	// Decapsulate the /ipfs/<peerID> part from the target
 	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
 	targetPeerAddr, _ := ma.NewMultiaddr(
-		fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
-	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
+		fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid))) // /ipfs/QmVmDaabYcS3pn23KaFjkdw6hkReUUma8sBKqSDHrPYPd2
+	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr) // /ip4/127.0.0.1/tcp/10000
+	log.Printf("targetAddr=%s\n", targetAddr)
 
 	// We have a peer ID and a targetAddr so we add it to the peerstore
 	// so LibP2P knows how to contact it
 	ha.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
-
+	log.Println("ha.Peerstore=", ha.Peerstore().Peers())
+	printPeers(ha.Peerstore())
 	log.Println("opening stream")
 	// make a new stream from host B to host A
 	// it should be handled on host A by the handler we set above because
 	// we use the same /echo/1.0.0 protocol
-	s, err := ha.NewStream(context.Background(), peerid, "/echo/1.0.0")
+	s, err := ha.NewStream(context.Background(), peerid, addPeerRequest)
 	if err != nil {
 		log.Fatalln(err)
 	}
