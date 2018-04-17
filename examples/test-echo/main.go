@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"io"
@@ -11,7 +10,6 @@ import (
 	"log"
 	mrand "math/rand"
 
-	libp2p "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p"
 	net "gx/ipfs/QmQm7WmgYCa4RSz76tKEYpRjApjnRw8ZTUVQC15b8JM4a2/go-libp2p-net"
 	gologging "gx/ipfs/QmQvJiADDe7JR4m968MwXobTCCzUqQkP87aRHe29MEBGHV/go-logging"
 	golog "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
@@ -20,6 +18,10 @@ import (
 	crypto "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 	pstore "gx/ipfs/QmeZVQzUrXqaszo24DAoHfGzcmCptN9JyngLkGAiEfk2x7/go-libp2p-peerstore"
 	host "gx/ipfs/QmfCtHMCd9xFvehvHeVxtKVXJTMVTuHhyPRVHEXetn87vL/go-libp2p-host"
+
+	bhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/basic"
+	rhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/routed"
+	swarm "gx/ipfs/QmSKrS9EF4V8FpD1d5FUGQiwYLNkXcxKabWgT2aWNVnQie/go-libp2p-swarm"
 
 	dht "gx/ipfs/Qmdm5sm2xHCXNaWdxpjhFeStvSNMRhKQkqpBX7aDcqXtfT/go-libp2p-kad-dht"
 
@@ -33,17 +35,17 @@ const addPeerResponse = "/addPeer/addpeerresp/0.0.1"
 
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
-func makeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error) {
+func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 
 	// If the seed is zero, use real cryptographic randomness. Otherwise, use a
 	// deterministic randomness source to make generated keys stay the same
 	// across multiple runs
 	var r io.Reader
-	if randseed == 0 {
-		r = rand.Reader
-	} else {
-		r = mrand.New(mrand.NewSource(randseed))
-	}
+	// if randseed == 0 {
+	// 	r = rand.Reader
+	// } else {
+	// 	r = mrand.New(mrand.NewSource(randseed))
+	// }
 	// for convenience
 	r = mrand.New(mrand.NewSource(randseed))
 
@@ -55,23 +57,41 @@ func makeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error
 		return nil, err
 	}
 
-	opts := []libp2p.Option{
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", listenPort)),
-		libp2p.Identity(priv),
-	}
-
-	if !secio {
-		opts = append(opts, libp2p.NoEncryption())
-	}
-
-	basicHost, err := libp2p.New(context.Background(), opts...)
+	// Get the peer id
+	pid, err := peer.IDFromPrivateKey(priv)
 	if err != nil {
 		return nil, err
 	}
-	ctx, _ := context.WithCancel(context.Background())
+
+	maddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort))
+	if err != nil {
+		return nil, err
+	}
+
+	// We've created the identity, now we need to store it to use the bhost constructors
+	ps := pstore.NewPeerstore()
+	ps.AddPrivKey(pid, priv)
+	ps.AddPubKey(pid, priv.GetPublic())
+
+	ctx := context.Background()
+	netw, err := swarm.NewNetwork(ctx, []ma.Multiaddr{maddr}, pid, ps, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	hostOpts := &bhost.HostOpts{
+		NATManager: bhost.NewNATManager(netw),
+	}
+
+	basicHost, err := bhost.NewHost(ctx, netw, hostOpts)
+	if err != nil {
+		return nil, err
+	}
 	dstore := dsync.MutexWrap(ds.NewMapDatastore())
 	// Make the DHT NOTE - Using Client constructor
-	dht.NewDHT(ctx, basicHost, dstore)
+	dht := dht.NewDHT(ctx, basicHost, dstore)
+	// Make the routed host
+	routedHost := rhost.Wrap(basicHost, dht)
 
 	// Build host multiaddress
 	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", basicHost.ID().Pretty()))
@@ -82,13 +102,10 @@ func makeBasicHost(listenPort int, secio bool, randseed int64) (host.Host, error
 	log.Printf("addr=%s\n", addr)
 	fullAddr := addr.Encapsulate(hostAddr)
 	log.Printf("I am %s\n", fullAddr)
-	if secio {
-		log.Printf("Now run \"./echo -l %d -d %s -secio\" on a different terminal\n", listenPort+1, fullAddr)
-	} else {
-		log.Printf("Now run \"./echo -l %d -d %s\" on a different terminal\n", listenPort+1, fullAddr)
-	}
 
-	return basicHost, nil
+	log.Printf("Now run \"./echo -l %d -d %s\" on a different terminal\n", listenPort+1, fullAddr)
+
+	return routedHost, nil
 }
 
 func printPeers(ps pstore.Peerstore) {
@@ -112,7 +129,6 @@ func main() {
 	nodeNumber := flag.Int("n", 0, "which node")
 	listenF := flag.Int("l", 0, "wait for incoming connections")
 	target := flag.String("d", "", "target peer to dial")
-	secio := flag.Bool("secio", false, "enable secio")
 	seed := flag.Int64("seed", 0, "set random seed for id generation")
 	flag.Parse()
 
@@ -128,7 +144,7 @@ func main() {
 	}
 
 	// Make a host that listens on the given multiaddress
-	ha, err := makeBasicHost(*listenF, *secio, *seed)
+	ha, err := makeBasicHost(*listenF, *seed)
 	if err != nil {
 		log.Fatal(err)
 	}
