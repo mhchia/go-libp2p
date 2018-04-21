@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package protocols.p2p;
+
+// a protocol define a set of reuqest and responses
+message AddPeerRequest {
+    // method specific data
+    string message = 1;
+    // add any data here....
+}
+
+message AddPeerResponse {
+    // response specific data
+    string message = 1;
+
+    // ... add any additional message data here
+}
