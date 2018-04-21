@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	mrand "math/rand"
 
@@ -19,6 +18,7 @@ import (
 
 	host "gx/ipfs/QmfCtHMCd9xFvehvHeVxtKVXJTMVTuHhyPRVHEXetn87vL/go-libp2p-host"
 
+	"github.com/gogo/protobuf/proto"
 	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 
 	libp2p "github.com/libp2p/go-libp2p"
@@ -68,6 +68,7 @@ const addPeerRequest = "/addPeer/addpeerreq"
 const addPeerResponse = "/addPeer/addpeerresp"
 
 func printPeers(ps pstore.Peerstore) {
+	log.Println("Peer ==================================")
 	for index, peerID := range ps.Peers() {
 		log.Printf(
 			"peer %d: peerId=%s, peerAddrs=%s\n",
@@ -93,18 +94,20 @@ func handleAddPeer(h host.Host, s net.Stream) {
 	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
 	err := decoder.Decode(data)
 	if err != nil {
+		s.Reset()
 		return
 	}
 
-	if err := doEcho(s); err != nil {
-		log.Println(err)
-		s.Reset()
-	} else {
-		s.Close()
+	// response
+	res := &pbmsg.AddPeerRequest{
+		Message: "Pong: accepted AddPeer",
 	}
-	// TODO: should do other checks to become peer
-	// h.Peerstore().AddAddr(remotePeerID, remotePeerMultiaddr, pstore.PermanentAddrTTL)
-	s.Reset()
+	ok := sendProtoMessage(res, s)
+	if !ok {
+		return
+	}
+
+	log.Printf("receive: %s", data)
 	printPeers(h.Peerstore())
 }
 
@@ -129,12 +132,13 @@ func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
 	// Decapsulate the /ipfs/<peerID> part from the target
 	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
 	targetPeerAddr, _ := ma.NewMultiaddr(
-		fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
+		fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)),
+	)
 	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
 	return peerid, targetAddr
 }
 
-func sendAddPeer(h host.Host, peerAddr string) {
+func sendAddPeer(h host.Host, peerAddr string) bool {
 
 	peerid, targetAddr := parseAddr(peerAddr)
 	// TODO: seems `Peerstore().AddAddr` must be done before we open a new stream?
@@ -142,27 +146,47 @@ func sendAddPeer(h host.Host, peerAddr string) {
 	// so LibP2P knows how to contact it
 	h.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
 
-	log.Println("opening stream")
 	// make a new stream from host B to host A
 	// it should be handled on host A by the handler we set above because
 	// we use the same /echo/1.0.0 protocol
+	req := &pbmsg.AddPeerRequest{
+		Message: fmt.Sprintf("Ping from %s", h.ID()),
+	}
 	s, err := h.NewStream(context.Background(), peerid, addPeerRequest)
-
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	_, err = s.Write([]byte("Hello, world!\n"))
-	if err != nil {
-		log.Fatalln(err)
+	ok := sendProtoMessage(req, s)
+	if !ok {
+		return false
 	}
 
-	out, err := ioutil.ReadAll(s)
+	data := &pbmsg.AddPeerResponse{}
+	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
+	err = decoder.Decode(data)
 	if err != nil {
-		log.Fatalln(err)
+		log.Print("Failed to get response")
+		s.Reset()
+		return false
 	}
+	s.Close()
+	log.Printf("read reply: %s\n", data)
+	return true
+}
 
-	log.Printf("read reply: %q\n", out)
+// helper method - writes a protobuf go data object to a network stream
+// data: reference of protobuf go data object to send (not the object itself)
+// s: network stream to write the data to
+func sendProtoMessage(data proto.Message, s net.Stream) bool {
+	writer := bufio.NewWriter(s)
+	enc := protobufCodec.Multicodec(nil).Encoder(writer)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+	writer.Flush()
+	return true
 }
 
 func main() {
@@ -197,17 +221,4 @@ func main() {
 
 	/**** This is where the listener code ends ****/
 	sendAddPeer(ha, *target)
-}
-
-// doEcho reads a line of data a stream and writes it back
-func doEcho(s net.Stream) error {
-	buf := bufio.NewReader(s)
-	str, err := buf.ReadString('\n')
-	if err != nil {
-		return err
-	}
-
-	log.Printf("read: %s\n", str)
-	_, err = s.Write([]byte(str))
-	return err
 }
