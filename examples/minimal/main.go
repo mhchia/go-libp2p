@@ -91,9 +91,8 @@ func handleAddPeer(h host.Host, s net.Stream) {
 
 	log.Println("tring to parse message")
 	data := &pbmsg.AddPeerRequest{}
-	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
-	err := decoder.Decode(data)
-	if err != nil {
+	if ok := readProtoMessage(data, s); !ok {
+		log.Print("failed to read AddPeerResponse")
 		s.Reset()
 		return
 	}
@@ -102,8 +101,8 @@ func handleAddPeer(h host.Host, s net.Stream) {
 	res := &pbmsg.AddPeerRequest{
 		Message: "Pong: accepted AddPeer",
 	}
-	ok := sendProtoMessage(res, s)
-	if !ok {
+	if ok := sendProtoMessage(res, s); !ok {
+		s.Reset()
 		return
 	}
 
@@ -156,21 +155,28 @@ func sendAddPeer(h host.Host, peerAddr string) bool {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	ok := sendProtoMessage(req, s)
-	if !ok {
+	if ok := sendProtoMessage(req, s); !ok {
 		return false
 	}
 
 	data := &pbmsg.AddPeerResponse{}
-	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
-	err = decoder.Decode(data)
-	if err != nil {
-		log.Print("Failed to get response")
-		s.Reset()
+	if ok := readProtoMessage(data, s); !ok {
+		log.Print("failed to read AddPeerResponse")
 		return false
 	}
+
 	s.Close()
 	log.Printf("read reply: %s\n", data)
+	return true
+}
+
+func readProtoMessage(data proto.Message, s net.Stream) bool {
+	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
+	err := decoder.Decode(data)
+	if err != nil {
+		log.Print("Failed to read proto")
+		return false
+	}
 	return true
 }
 
