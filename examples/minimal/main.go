@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	mrand "math/rand"
 
-	net "gx/ipfs/QmQm7WmgYCa4RSz76tKEYpRjApjnRw8ZTUVQC15b8JM4a2/go-libp2p-net"
 	gologging "gx/ipfs/QmQvJiADDe7JR4m968MwXobTCCzUqQkP87aRHe29MEBGHV/go-logging"
 	golog "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
 	ma "gx/ipfs/QmWWQ2Txc2c6tqjsBpzg5Ar652cHPGNsQQp2SejkNmkUMb/go-multiaddr"
@@ -18,11 +16,7 @@ import (
 
 	host "gx/ipfs/QmfCtHMCd9xFvehvHeVxtKVXJTMVTuHhyPRVHEXetn87vL/go-libp2p-host"
 
-	"github.com/gogo/protobuf/proto"
-	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
-
 	libp2p "github.com/libp2p/go-libp2p"
-	protobufCodec "github.com/multiformats/go-multicodec/protobuf"
 )
 
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
@@ -80,37 +74,6 @@ func printPeers(ps pstore.Peerstore) {
 	}
 }
 
-func handleAddPeer(h host.Host, s net.Stream) {
-	remotePeerID := s.Conn().RemotePeer()
-	remotePeerMultiaddr := s.Conn().RemoteMultiaddr()
-	log.Printf(
-		"%s: from peerId=%s, peerMultiaddr=%s\n",
-		addPeerRequest,
-		remotePeerID,
-		remotePeerMultiaddr,
-	)
-
-	log.Println("tring to parse message")
-	data := &pbmsg.AddPeerRequest{}
-	if ok := readProtoMessage(data, s); !ok {
-		log.Print("failed to read AddPeerResponse")
-		s.Reset()
-		return
-	}
-
-	// response
-	res := &pbmsg.AddPeerRequest{
-		Message: "Pong: accepted AddPeer",
-	}
-	if ok := sendProtoMessage(res, s); !ok {
-		s.Reset()
-		return
-	}
-
-	log.Printf("receive: %s", data)
-	printPeers(h.Peerstore())
-}
-
 func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
 	// The following code extracts target's the peer ID from the
 	// given multiaddress
@@ -138,64 +101,6 @@ func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
 	return peerid, targetAddr
 }
 
-func sendAddPeer(h host.Host, peerAddr string) bool {
-
-	peerid, targetAddr := parseAddr(peerAddr)
-	// TODO: seems `Peerstore().AddAddr` must be done before we open a new stream?
-	// We have a peer ID and a targetAddr so we add it to the peerstore
-	// so LibP2P knows how to contact it
-	h.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
-
-	// make a new stream from host B to host A
-	// it should be handled on host A by the handler we set above because
-	// we use the same /echo/1.0.0 protocol
-	req := &pbmsg.AddPeerRequest{
-		Message: fmt.Sprintf("Ping from %s", h.ID()),
-	}
-	s, err := h.NewStream(context.Background(), peerid, addPeerRequest)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	if ok := sendProtoMessage(req, s); !ok {
-		return false
-	}
-
-	data := &pbmsg.AddPeerResponse{}
-	if ok := readProtoMessage(data, s); !ok {
-		log.Print("failed to read AddPeerResponse")
-		return false
-	}
-
-	s.Close()
-	log.Printf("read reply: %s\n", data)
-	return true
-}
-
-func readProtoMessage(data proto.Message, s net.Stream) bool {
-	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
-	err := decoder.Decode(data)
-	if err != nil {
-		log.Print("Failed to read proto")
-		return false
-	}
-	return true
-}
-
-// helper method - writes a protobuf go data object to a network stream
-// data: reference of protobuf go data object to send (not the object itself)
-// s: network stream to write the data to
-func sendProtoMessage(data proto.Message, s net.Stream) bool {
-	writer := bufio.NewWriter(s)
-	enc := protobufCodec.Multicodec(nil).Encoder(writer)
-	err := enc.Encode(data)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-	writer.Flush()
-	return true
-}
-
 func main() {
 	// LibP2P code uses golog to log messages. They log with different
 	// string IDs (i.e. "swarm"). We can control the verbosity level for
@@ -214,15 +119,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	node := makeNode(ha)
-	log.Println(node)
-
-	// Set a stream handler on host A. /echo/1.0.0 is
-	// a user-defined protocol name.
-	ha.SetStreamHandler(addPeerRequest, func(s net.Stream) {
-		handleAddPeer(ha, s)
-	})
 
 	if *target == "" {
 		log.Println("listening for connections")
@@ -230,5 +127,6 @@ func main() {
 	}
 
 	/**** This is where the listener code ends ****/
-	sendAddPeer(ha, *target)
+	node.AddPeer(*target)
+	select {}
 }
