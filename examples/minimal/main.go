@@ -64,8 +64,9 @@ func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 	return basicHost, nil
 }
 
-const addPeerRequest = "/addPeer/addpeerreq"
-const addPeerResponse = "/addPeer/addpeerresp"
+func makeNode(h host.Host) *Node {
+	return NewNode(h)
+}
 
 func printPeers(ps pstore.Peerstore) {
 	log.Println("Peer ==================================")
@@ -213,6 +214,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	node := makeNode(ha)
+	log.Println(node)
 
 	// Set a stream handler on host A. /echo/1.0.0 is
 	// a user-defined protocol name.
