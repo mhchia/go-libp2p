@@ -15,3 +15,8 @@ message AddPeerResponse {
 
     // ... add any additional message data here
 }
+
+message SendCollationRequest {
+    int64 shardID = 1;
+    string blobs = 2;
+}

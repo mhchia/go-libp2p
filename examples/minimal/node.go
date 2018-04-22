@@ -18,6 +18,7 @@ const clientVersion = "go-p2p-node/0.0.1"
 type Node struct {
 	host.Host        // lib-p2p host
 	*AddPeerProtocol // ping protocol impl
+	ShardProtocols   map[int64]*ShardProtocol
 	// add other protocols here...
 }
 
@@ -25,6 +26,9 @@ type Node struct {
 func NewNode(host host.Host) *Node {
 	node := &Node{Host: host}
 	node.AddPeerProtocol = NewAddPeerProtocol(node)
+	var testShardID int64 = 87
+	node.ShardProtocols = make(map[int64]*ShardProtocol, 100)
+	node.ShardProtocols[testShardID] = NewShardProtocol(node, testShardID)
 	return node
 }
 

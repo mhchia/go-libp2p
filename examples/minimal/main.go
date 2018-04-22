@@ -58,10 +58,6 @@ func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 	return basicHost, nil
 }
 
-func makeNode(h host.Host) *Node {
-	return NewNode(h)
-}
-
 func printPeers(ps pstore.Peerstore) {
 	log.Println("Peer ==================================")
 	for index, peerID := range ps.Peers() {
@@ -119,7 +115,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	node := makeNode(ha)
+	node := NewNode(ha)
 
 	if *target == "" {
 		log.Println("listening for connections")
@@ -128,5 +124,6 @@ func main() {
 
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
+	node.ShardProtocols[int64(87)].sendCollation(*target, "blobssssss")
 	select {}
 }
