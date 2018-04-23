@@ -14,11 +14,22 @@ import (
 // node client version
 const clientVersion = "go-p2p-node/0.0.1"
 
+type ShardIDType int64
+
+type ShardManager struct {
+	listeningShards map[ShardIDType]bool
+	PeerShards      map[string]([]ShardIDType)
+}
+
 // Node type - a p2p host implementing one or more p2p protocols
 type Node struct {
 	host.Host        // lib-p2p host
-	*AddPeerProtocol // ping protocol impl
-	ShardProtocols   map[int64]*ShardProtocol
+	*AddPeerProtocol // addpeer protocol impl
+
+	// Shard related
+	ShardManager          ShardManager
+	*NotifyShardsProtocol // notifyshards protocol
+	ShardProtocols        map[ShardIDType]*ShardProtocol
 	// add other protocols here...
 }
 
@@ -26,10 +37,40 @@ type Node struct {
 func NewNode(host host.Host) *Node {
 	node := &Node{Host: host}
 	node.AddPeerProtocol = NewAddPeerProtocol(node)
-	var testShardID int64 = 87
-	node.ShardProtocols = make(map[int64]*ShardProtocol, 100)
-	node.ShardProtocols[testShardID] = NewShardProtocol(node, testShardID)
+	node.initShardManager()
+	node.NotifyShardsProtocol = NewNotifyShardsProtocol(node)
+	node.ShardProtocols = make(map[ShardIDType]*ShardProtocol, numShards)
 	return node
+}
+
+func (n *Node) initShardManager() {
+	n.ShardManager.listeningShards = make(map[ShardIDType]bool, numShards)
+}
+
+func (n *Node) AddListeningShard(shardID ShardIDType) {
+	n.ShardManager.listeningShards[shardID] = true
+	n.ShardProtocols[shardID] = NewShardProtocol(n, shardID)
+}
+
+func (n *Node) GetListeningShards() []ShardIDType {
+	listeningShards := []ShardIDType{}
+	for shardID, isListening := range n.ShardManager.listeningShards {
+		if isListening {
+			listeningShards = append(listeningShards, shardID)
+		}
+	}
+	return listeningShards
+}
+
+func (n *Node) RemoveListeningShards(shardID ShardIDType) {
+	if _, prs := n.ShardManager.listeningShards[shardID]; prs {
+		// s.listeningShards[shardID] = false
+		delete(n.ShardManager.listeningShards, shardID)
+	}
+	if _, prs := n.ShardProtocols[shardID]; prs {
+		// s.listeningShards[shardID] = false
+		delete(n.ShardProtocols, shardID)
+	}
 }
 
 // helper method - writes a protobuf go data object to a network stream

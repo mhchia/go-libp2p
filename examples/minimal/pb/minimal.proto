@@ -11,7 +11,7 @@ message AddPeerRequest {
 
 message AddPeerResponse {
     // response specific data
-    string message = 1;
+    bool success = 1;
 
     // ... add any additional message data here
 }
@@ -19,4 +19,8 @@ message AddPeerResponse {
 message SendCollationRequest {
     int64 shardID = 1;
     string blobs = 2;
+}
+
+message NotifyShardsRequest {
+    repeated int64 shardIDs = 1;
 }

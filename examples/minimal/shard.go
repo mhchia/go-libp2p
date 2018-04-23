@@ -16,23 +16,20 @@ import (
 )
 
 // pattern: /protocol-name/request-or-response-message/version
-const sendCollationRequestFmt = "/sendCollation%d/sendcollationreq/0.0.1"
-
-// const getCollationRequest = "/addPeer/addpeerreq/0.0.1"
-// const getCollationResponse = "/addPeer/addpeerresp/0.0.1"
+const sendCollationRequestFmt = "/sendCollation%d/request/0.0.1"
 
 // ShardProtocol type
 type ShardProtocol struct {
-	node    *Node // local host
-	shardID int64
+	node    *Node       // local host
+	shardID ShardIDType // TODO: should be changed to `listeningShardIDs`
 	// requests map[string]*pbmsg.SendCollationRequest // used to access request data from response handlers
 }
 
-func getSendCollationRequestProtocolID(shardID int64) protocol.ID {
+func getSendCollationRequestProtocolID(shardID ShardIDType) protocol.ID {
 	return protocol.ID(fmt.Sprintf(sendCollationRequestFmt, shardID))
 }
 
-func NewShardProtocol(node *Node, shardID int64) *ShardProtocol {
+func NewShardProtocol(node *Node, shardID ShardIDType) *ShardProtocol {
 	p := &ShardProtocol{
 		node:    node,
 		shardID: shardID,
@@ -43,8 +40,7 @@ func NewShardProtocol(node *Node, shardID int64) *ShardProtocol {
 
 // remote peer requests handler
 func (p *ShardProtocol) sendCollationRequest(s inet.Stream) {
-
-	// get request data
+	// TODO: should reject if the node isn't listening to the shard
 	data := &pbmsg.SendCollationRequest{}
 	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
 	err := decoder.Decode(data)
@@ -52,7 +48,6 @@ func (p *ShardProtocol) sendCollationRequest(s inet.Stream) {
 		log.Println(err)
 		return
 	}
-	log.Printf("FUCK")
 	log.Printf(
 		"%s: Received sendCollationRequest from %s. Message: shardID=%d, blobs=%s",
 		s.Conn().LocalPeer(),
@@ -67,7 +62,7 @@ func (p *ShardProtocol) sendCollation(peerAddr string, blobs string) bool {
 	log.Printf("%s: Sending collation to: %s....", p.node.ID(), peerid)
 	// create message data
 	req := &pbmsg.SendCollationRequest{
-		ShardID: p.shardID,
+		ShardID: int64(p.shardID),
 		Blobs:   blobs,
 	}
 

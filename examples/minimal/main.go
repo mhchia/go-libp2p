@@ -14,14 +14,14 @@ import (
 	crypto "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 	pstore "gx/ipfs/QmeZVQzUrXqaszo24DAoHfGzcmCptN9JyngLkGAiEfk2x7/go-libp2p-peerstore"
 
-	host "gx/ipfs/QmfCtHMCd9xFvehvHeVxtKVXJTMVTuHhyPRVHEXetn87vL/go-libp2p-host"
-
 	libp2p "github.com/libp2p/go-libp2p"
 )
 
-// makeBasicHost creates a LibP2P host with a random peer ID listening on the
+const numShards = 100
+
+// makeNode creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
-func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
+func makeNode(listenPort int, randseed int64) (*Node, error) {
 
 	// If the seed is zero, use real cryptographic randomness. Otherwise, use a
 	// deterministic randomness source to make generated keys stay the same
@@ -55,7 +55,10 @@ func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 	log.Printf("I am %s\n", fullAddr)
 	log.Printf("Now run \"./echo -l %d -d %s\" on a different terminal\n", listenPort+1, fullAddr)
 
-	return basicHost, nil
+	// Make a host that listens on the given multiaddress
+	node := NewNode(basicHost)
+
+	return node, nil
 }
 
 func printPeers(ps pstore.Peerstore) {
@@ -110,12 +113,13 @@ func main() {
 
 	listenPort := 10000 + *seed
 
-	// Make a host that listens on the given multiaddress
-	ha, err := makeBasicHost(int(listenPort), *seed)
+	node, err := makeNode(int(listenPort), *seed)
 	if err != nil {
 		log.Fatal(err)
 	}
-	node := NewNode(ha)
+
+	testShardID := ShardIDType(87)
+	node.AddListeningShard(testShardID)
 
 	if *target == "" {
 		log.Println("listening for connections")
@@ -124,6 +128,9 @@ func main() {
 
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
-	node.ShardProtocols[int64(87)].sendCollation(*target, "blobssssss")
+	node.AddListeningShard(20)
+	node.AddListeningShard(30)
+	log.Println("listeningShards", node.GetListeningShards())
+	node.ShardProtocols[testShardID].sendCollation(*target, "blobssssss")
 	select {}
 }
