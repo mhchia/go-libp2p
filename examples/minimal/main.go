@@ -114,12 +114,13 @@ func main() {
 	listenPort := 10000 + *seed
 
 	node, err := makeNode(int(listenPort), *seed)
+	log.Println(node.ID())
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	testShardID := ShardIDType(87)
-	node.AddListeningShard(testShardID)
+	node.ListenShard(testShardID)
 
 	if *target == "" {
 		log.Println("listening for connections")
@@ -128,9 +129,10 @@ func main() {
 
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
-	node.AddListeningShard(20)
-	node.AddListeningShard(30)
-	log.Println("listeningShards", node.GetListeningShards())
+	node.ListenShard(20)
+	node.ListenShard(30)
+	node.UnlistenShard(20)
+	log.Println("listeningShards", node.ListListeningShards())
 	node.ShardProtocols[testShardID].sendCollation(*target, "blobssssss")
 	select {}
 }
