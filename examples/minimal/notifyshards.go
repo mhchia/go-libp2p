@@ -21,6 +21,7 @@ const notifyShardsResponse = "/notifyShards/response/0.0.1"
 type NotifyShardsProtocol struct {
 	node     *Node                                 // local host
 	requests map[string]*pbmsg.NotifyShardsRequest // used to access request data from response handlers
+	done     chan bool                             // only for demo purposes to stop main from terminating
 }
 
 func NewNotifyShardsProtocol(node *Node) *NotifyShardsProtocol {

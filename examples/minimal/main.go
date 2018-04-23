@@ -44,19 +44,9 @@ func makeNode(listenPort int, randseed int64) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Build host multiaddress
-	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", basicHost.ID().Pretty()))
-
-	// Now we can build a full multiaddress to reach this host
-	// by encapsulating both addresses:
-	addr := basicHost.Addrs()[0]
-	fullAddr := addr.Encapsulate(hostAddr)
-	log.Printf("I am %s\n", fullAddr)
-	log.Printf("Now run \"./echo -l %d -d %s\" on a different terminal\n", listenPort+1, fullAddr)
-
 	// Make a host that listens on the given multiaddress
 	node := NewNode(basicHost)
+	log.Printf("I am %s\n", node.GetFullAddr())
 
 	return node, nil
 }
@@ -132,7 +122,7 @@ func main() {
 	node.ListenShard(20)
 	node.ListenShard(30)
 	node.UnlistenShard(20)
-	log.Println("listeningShards", node.ListListeningShards())
+	log.Println("listeningShards", node.GetListeningShards())
 	node.ShardProtocols[testShardID].sendCollation(*target, "blobssssss")
 	select {}
 }

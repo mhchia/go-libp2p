@@ -20,14 +20,14 @@ const addPeerResponse = "/addPeer/response/0.0.1"
 
 // AddPeerProtocol type
 type AddPeerProtocol struct {
-	node     *Node                            // local host
-	requests map[string]*pbmsg.AddPeerRequest // used to access request data from response handlers
+	node *Node     // local host
+	done chan bool // only for demo purposes to stop main from terminating
 }
 
 func NewAddPeerProtocol(node *Node) *AddPeerProtocol {
 	p := &AddPeerProtocol{
-		node:     node,
-		requests: make(map[string]*pbmsg.AddPeerRequest),
+		node: node,
+		done: make(chan bool),
 	}
 	node.SetStreamHandler(addPeerRequest, p.onRequest)
 	node.SetStreamHandler(addPeerResponse, p.onResponse)
@@ -36,7 +36,7 @@ func NewAddPeerProtocol(node *Node) *AddPeerProtocol {
 
 // remote peer requests handler
 func (p *AddPeerProtocol) onRequest(s inet.Stream) {
-
+	log.Println("!@# IsPeer", p.node.IsPeer(s.Conn().RemotePeer()))
 	// get request data
 	data := &pbmsg.AddPeerRequest{}
 	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
@@ -82,15 +82,7 @@ func (p *AddPeerProtocol) onResponse(s inet.Stream) {
 		s.Conn().RemotePeer(),
 		data.Success,
 	)
-	// locate request data and remove it if found
-	// _, ok := p.requests[data.MessageData.Id]
-	// if ok {
-	// 	// remove request from map as we have processed it here
-	// 	delete(p.requests, data.MessageData.Id)
-	// } else {
-	// 	log.Println("Failed to locate request data boject for response")
-	// 	return
-	// }
+	p.done <- true
 }
 
 func (p *AddPeerProtocol) AddPeer(peerAddr string) bool {

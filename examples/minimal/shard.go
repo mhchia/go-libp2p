@@ -23,6 +23,7 @@ type ShardProtocol struct {
 	node    *Node       // local host
 	shardID ShardIDType // TODO: should be changed to `listeningShardIDs`
 	// requests map[string]*pbmsg.SendCollationRequest // used to access request data from response handlers
+	done chan bool // only for demo purposes to stop main from terminating
 }
 
 func getSendCollationRequestProtocolID(shardID ShardIDType) protocol.ID {
