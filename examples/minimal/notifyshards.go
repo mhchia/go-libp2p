@@ -19,15 +19,14 @@ const notifyShardsResponse = "/notifyShards/response/0.0.1"
 
 // NotifyShardsProtocol type
 type NotifyShardsProtocol struct {
-	node     *Node                                 // local host
-	requests map[string]*pbmsg.NotifyShardsRequest // used to access request data from response handlers
-	done     chan bool                             // only for demo purposes to stop main from terminating
+	node *Node     // local host
+	done chan bool // only for demo purposes to stop main from terminating
 }
 
 func NewNotifyShardsProtocol(node *Node) *NotifyShardsProtocol {
 	p := &NotifyShardsProtocol{
-		node:     node,
-		requests: make(map[string]*pbmsg.NotifyShardsRequest),
+		node: node,
+		done: make(chan bool),
 	}
 	node.SetStreamHandler(notifyShardsRequest, p.onRequest)
 	// node.SetStreamHandler(notifyShardsResponse, p.onResponse)
@@ -45,9 +44,15 @@ func (p *NotifyShardsProtocol) onRequest(s inet.Stream) {
 		log.Println(err)
 		return
 	}
-
-	log.Printf("%s: Received notifyShards request from %s. shardIDs: %v", s.Conn().LocalPeer(), s.Conn().RemotePeer(), data.ShardIDs)
-
+	remotePeerID := s.Conn().RemotePeer()
+	log.Printf(
+		"%s: Received notifyShards request from %s. shardIDs: %v",
+		s.Conn().LocalPeer(),
+		s.Conn().RemotePeer(),
+		data.ShardIDs,
+	)
+	p.node.SetPeerListeningShard(remotePeerID, data.ShardIDs)
+	p.done <- true
 }
 
 func (p *NotifyShardsProtocol) NotifyShards(peerAddr string, shardIDs []int64) bool {
@@ -69,9 +74,5 @@ func (p *NotifyShardsProtocol) NotifyShards(peerAddr string, shardIDs []int64) b
 		return false
 	}
 
-	// store ref request so response handler has access to it
-	// p.requests[req.MessageData.Id] = req
-	// log.Printf("%s: Ping to: %s was sent. Message Id: %s, Message: %s", p.node.ID(), host.ID(), req.MessageData.Id, req.Message)
 	return true
-
 }

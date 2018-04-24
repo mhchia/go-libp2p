@@ -17,7 +17,7 @@ import (
 // node client version
 const clientVersion = "go-p2p-node/0.0.1"
 
-type ShardIDType uint64
+type ShardIDType = int64
 
 type ListeningShards struct {
 	shardMap map[ShardIDType]bool
@@ -140,6 +140,16 @@ func (n *Node) GetPeerListeningShard(peerID peer.ID) []ShardIDType {
 		return make([]ShardIDType, 0)
 	}
 	return n.peerListeningShards[peerID].ToSlice()
+}
+
+func (n *Node) SetPeerListeningShard(peerID peer.ID, shardIDs []ShardIDType) {
+	listeningShards := n.GetPeerListeningShard(peerID)
+	for _, shardID := range listeningShards {
+		n.RemovePeerListeningShard(peerID, shardID)
+	}
+	for _, shardID := range shardIDs {
+		n.AddPeerListeningShard(peerID, shardID)
+	}
 }
 
 func (n *Node) IsPeerListeningShard(peerID peer.ID, shardID ShardIDType) bool {

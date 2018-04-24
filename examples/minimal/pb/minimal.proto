@@ -18,7 +18,8 @@ message AddPeerResponse {
 
 message SendCollationRequest {
     int64 shardID = 1;
-    string blobs = 2;
+    int64 number = 2;
+    string blobs = 3;
 }
 
 message NotifyShardsRequest {

@@ -12,6 +12,7 @@ func makeTestingNode(number int) (*Node, error) {
 
 /* unit tests */
 func TestListeningShards(t *testing.T) {
+	// TODO: add check for `ShardProtocol`
 	node, err := makeTestingNode(0)
 	if err != nil {
 		t.Error("Failed to create node")
@@ -157,4 +158,32 @@ func TestAddPeer(t *testing.T) {
 
 func TestNotifyShards(t *testing.T) {
 	// node0, node1 := makePeerNodes(t)
+	node0, node1 := makePeerNodes(t)
+	node0ListeningShards := []ShardIDType{12, 34, 56}
+	node0.NotifyShards(node1.GetFullAddr(), node0ListeningShards)
+	<-node1.NotifyShardsProtocol.done
+	for _, shardID := range node0ListeningShards {
+		if !node1.IsPeerListeningShard(node0.ID(), shardID) {
+			t.Errorf(
+				"Peer %v should be conscious that %v is listening to shard %v",
+				node1.ID(),
+				node0.ID(),
+				shardID,
+			)
+		}
+	}
+	// send again with different shards
+	nowNode0ListeningShards := []ShardIDType{4, 5}
+	node0.NotifyShards(node1.GetFullAddr(), nowNode0ListeningShards)
+	<-node1.NotifyShardsProtocol.done
+	for _, shardID := range nowNode0ListeningShards {
+		if !node1.IsPeerListeningShard(node0.ID(), shardID) {
+			t.Errorf(
+				"Peer %v should be conscious that %v is listening to shard %v",
+				node1.ID(),
+				node0.ID(),
+				shardID,
+			)
+		}
+	}
 }
