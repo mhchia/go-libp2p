@@ -1,6 +1,7 @@
 package main
 
 import (
+	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
 	"testing"
 )
 
@@ -9,6 +10,7 @@ func makeTestingNode(number int) (*Node, error) {
 	return makeNode(listeningPort, int64(number))
 }
 
+/* unit tests */
 func TestListeningShards(t *testing.T) {
 	node, err := makeTestingNode(0)
 	if err != nil {
@@ -41,8 +43,91 @@ func TestListeningShards(t *testing.T) {
 	node.UnlistenShard(testingShardID) // ensure no side effect
 }
 
-// func TestListeningShards(t *testing.T) {
-// }
+func TestPeerListeningShards(t *testing.T) {
+	node, err := makeTestingNode(0)
+	if err != nil {
+		t.Error("Failed to create node")
+	}
+	arbitraryPeerID := peer.ID("123456")
+	if node.IsPeer(arbitraryPeerID) {
+		t.Errorf(
+			"PeerID %v should be a non-peer peerID to make the test work correctly",
+			arbitraryPeerID,
+		)
+	}
+	var testingShardID ShardIDType = 87
+	if len(node.GetPeerListeningShard(arbitraryPeerID)) != 0 {
+		t.Errorf("Peer %v should not be listening to any shard", arbitraryPeerID)
+	}
+	if node.IsPeerListeningShard(arbitraryPeerID, testingShardID) {
+		t.Errorf("Peer %v should not be listening to shard %v", arbitraryPeerID, testingShardID)
+	}
+	node.AddPeerListeningShard(arbitraryPeerID, testingShardID)
+	if !node.IsPeerListeningShard(arbitraryPeerID, testingShardID) {
+		t.Errorf("Peer %v should be listening to shard %v", arbitraryPeerID, testingShardID)
+	}
+	node.AddPeerListeningShard(arbitraryPeerID, numShards)
+	if node.IsPeerListeningShard(arbitraryPeerID, numShards) {
+		t.Errorf(
+			"Peer %v should be able to listen to shardID bigger than %v",
+			arbitraryPeerID,
+			numShards,
+		)
+	}
+	// listen to multiple shards
+	anotherShardID := testingShardID + 1 // notice that it should be less than `numShards`
+	node.AddPeerListeningShard(arbitraryPeerID, anotherShardID)
+	if !node.IsPeerListeningShard(arbitraryPeerID, anotherShardID) {
+		t.Errorf("Peer %v should be listening to shard %v", arbitraryPeerID, testingShardID)
+	}
+	if len(node.GetPeerListeningShard(arbitraryPeerID)) != 2 {
+		t.Errorf(
+			"Peer %v should be listening to %v shards, not %v",
+			arbitraryPeerID,
+			2,
+			len(node.GetPeerListeningShard(arbitraryPeerID)),
+		)
+	}
+	node.RemovePeerListeningShard(arbitraryPeerID, anotherShardID)
+	if node.IsPeerListeningShard(arbitraryPeerID, anotherShardID) {
+		t.Errorf("Peer %v should be listening to shard %v", arbitraryPeerID, testingShardID)
+	}
+	if len(node.GetPeerListeningShard(arbitraryPeerID)) != 1 {
+		t.Errorf(
+			"Peer %v should be only listening to %v shards, not %v",
+			arbitraryPeerID,
+			1,
+			len(node.GetPeerListeningShard(arbitraryPeerID)),
+		)
+	}
+
+	// see if it is still correct with multiple peers
+	anotherPeerID := peer.ID("9547")
+	if node.IsPeer(anotherPeerID) {
+		t.Errorf(
+			"PeerID %v should be a non-peer peerID to make the test work correctly",
+			anotherPeerID,
+		)
+	}
+	if len(node.GetPeerListeningShard(anotherPeerID)) != 0 {
+		t.Errorf("Peer %v should not be listening to any shard", anotherPeerID)
+	}
+	node.AddPeerListeningShard(anotherPeerID, testingShardID)
+	if len(node.GetPeerListeningShard(anotherPeerID)) != 1 {
+		t.Errorf("Peer %v should be listening to 1 shard", anotherPeerID)
+	}
+	// make sure not affect other peers
+	if len(node.GetPeerListeningShard(arbitraryPeerID)) != 1 {
+		t.Errorf("Peer %v should be listening to 1 shard", arbitraryPeerID)
+	}
+	node.RemovePeerListeningShard(anotherPeerID, testingShardID)
+	if len(node.GetPeerListeningShard(anotherPeerID)) != 0 {
+		t.Errorf("Peer %v should be listening to 0 shard", anotherPeerID)
+	}
+	if len(node.GetPeerListeningShard(arbitraryPeerID)) != 1 {
+		t.Errorf("Peer %v should be listening to 1 shard", arbitraryPeerID)
+	}
+}
 
 func makePeerNodes(t *testing.T) (*Node, *Node) {
 	node0, err := makeTestingNode(0)
@@ -53,6 +138,9 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 	if err != nil {
 		t.Error("Failed to create node")
 	}
+	// if node0.IsPeer(node1.ID()) || node1.IsPeer(node0.ID()) {
+	// 	t.Error("Two initial nodes should not be connected without `AddPeer`")
+	// }
 	node0.AddPeer(node1.GetFullAddr())
 	// wait until node0 receive the response from node1
 	<-node0.AddPeerProtocol.done
