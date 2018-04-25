@@ -123,6 +123,10 @@ func main() {
 	node.ListenShard(30)
 	node.UnlistenShard(20)
 	log.Println("listeningShards", node.GetListeningShards())
-	node.ShardProtocols[testShardID].sendCollation(*target, "blobssssss")
+	node.ShardProtocols[testShardID].sendCollation(
+		*target,
+		1,
+		"blobssssss",
+	)
 	select {}
 }

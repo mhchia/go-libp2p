@@ -36,7 +36,6 @@ func NewAddPeerProtocol(node *Node) *AddPeerProtocol {
 
 // remote peer requests handler
 func (p *AddPeerProtocol) onRequest(s inet.Stream) {
-	log.Println("!@# IsPeer", p.node.IsPeer(s.Conn().RemotePeer()))
 	// get request data
 	data := &pbmsg.AddPeerRequest{}
 	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))

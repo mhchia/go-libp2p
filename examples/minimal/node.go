@@ -181,7 +181,6 @@ func (n *Node) GetFullAddr() string {
 	// Now we can build a full multiaddress to reach this host
 	// by encapsulating both addresses:
 	addr := n.Addrs()[0]
-	log.Printf("addr=%s", addr)
 	fullAddr := addr.Encapsulate(hostAddr)
 	return fullAddr.String()
 }

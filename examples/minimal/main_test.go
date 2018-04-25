@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
+	"log"
 	"testing"
+
+	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 )
 
 func makeTestingNode(number int) (*Node, error) {
@@ -27,6 +31,9 @@ func TestListeningShards(t *testing.T) {
 	if !node.IsShardListened(testingShardID) {
 		t.Errorf("Shard %v should have been listened", testingShardID)
 	}
+	if _, prs := node.ShardProtocols[testingShardID]; !prs {
+		t.Errorf("ShardProtocol[%v] should exist", testingShardID)
+	}
 	anotherShardID := testingShardID + 1
 	node.ListenShard(anotherShardID)
 	if !node.IsShardListened(anotherShardID) {
@@ -40,6 +47,9 @@ func TestListeningShards(t *testing.T) {
 	node.UnlistenShard(testingShardID)
 	if node.IsShardListened(testingShardID) {
 		t.Errorf("Shard %v should have been unlistened", testingShardID)
+	}
+	if _, prs := node.ShardProtocols[testingShardID]; prs {
+		t.Errorf("ShardProtocol[%v] should exist", testingShardID)
 	}
 	node.UnlistenShard(testingShardID) // ensure no side effect
 }
@@ -186,4 +196,47 @@ func TestNotifyShards(t *testing.T) {
 			)
 		}
 	}
+}
+
+func TestSendCollation(t *testing.T) {
+	node0, node1 := makePeerNodes(t)
+	var testingShardID int64 = 42
+	node0.ListenShard(testingShardID)
+	// fail
+	node0.ShardProtocols[testingShardID].sendCollation(
+		node1.GetFullAddr(),
+		1,
+		"123",
+	)
+
+	node1.ListenShard(testingShardID)
+	// fail: if the collation's shardID does not correspond to the protocol's shardID,
+	//		 receiver should reject it
+	var notlistenedShardID int64 = 24
+	req := &pbmsg.SendCollationRequest{
+		ShardID: notlistenedShardID,
+		Number:  1,
+		Blobs:   "123",
+	}
+	s, err := node0.NewStream(
+		context.Background(),
+		node1.ID(),
+		getSendCollationRequestProtocolID(testingShardID),
+	)
+	if err != nil {
+		log.Println(err)
+	}
+	node0.sendProtoMessage(req, s)
+	result := <-node1.ShardProtocols[testingShardID].done
+	if result {
+		t.Error("node1 should consider this message wrong")
+	}
+
+	// success
+	node0.ShardProtocols[testingShardID].sendCollation(
+		node1.GetFullAddr(),
+		1,
+		"123",
+	)
+	<-node1.ShardProtocols[testingShardID].done
 }

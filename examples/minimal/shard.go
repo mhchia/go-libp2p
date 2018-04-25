@@ -34,6 +34,7 @@ func NewShardProtocol(node *Node, shardID ShardIDType) *ShardProtocol {
 	p := &ShardProtocol{
 		node:    node,
 		shardID: shardID,
+		done:    make(chan bool),
 	}
 	node.SetStreamHandler(getSendCollationRequestProtocolID(shardID), p.sendCollationRequest)
 	return p
@@ -41,29 +42,53 @@ func NewShardProtocol(node *Node, shardID ShardIDType) *ShardProtocol {
 
 // remote peer requests handler
 func (p *ShardProtocol) sendCollationRequest(s inet.Stream) {
-	// TODO: should reject if the node isn't listening to the shard
+	// reject if the sender is not a peer
+	// TODO: confirm it works
+	if !p.node.IsPeer(s.Conn().LocalPeer()) {
+		log.Printf(
+			"%s: rejected sendCollationRequest from non-peer",
+			s.Conn().LocalPeer(),
+		)
+		p.done <- false
+		return
+	}
 	data := &pbmsg.SendCollationRequest{}
 	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
 	err := decoder.Decode(data)
 	if err != nil {
 		log.Println(err)
+		p.done <- false
+		return
+	}
+	// reject if the node isn't listening to the shard
+	if !p.node.IsShardListened(data.ShardID) {
+		log.Printf(
+			"%s: Rejected sendCollationRequest %v of not listening shard %v",
+			s.Conn().LocalPeer(),
+			data,
+			data.ShardID,
+		)
+		p.done <- false
 		return
 	}
 	log.Printf(
-		"%s: Received sendCollationRequest from %s. Message: shardID=%d, blobs=%s",
+		"%s: Received sendCollationRequest from %s. Message: shardID=%v, number=%v, blobs=%v",
 		s.Conn().LocalPeer(),
 		s.Conn().RemotePeer(),
 		data.ShardID,
+		data.Number,
 		data.Blobs,
 	)
+	p.done <- true
 }
 
-func (p *ShardProtocol) sendCollation(peerAddr string, blobs string) bool {
+func (p *ShardProtocol) sendCollation(peerAddr string, number int64, blobs string) bool {
 	peerid, _ := parseAddr(peerAddr)
 	log.Printf("%s: Sending collation to: %s....", p.node.ID(), peerid)
 	// create message data
 	req := &pbmsg.SendCollationRequest{
-		ShardID: int64(p.shardID),
+		ShardID: p.shardID,
+		Number:  number,
 		Blobs:   blobs,
 	}
 
@@ -81,9 +106,6 @@ func (p *ShardProtocol) sendCollation(peerAddr string, blobs string) bool {
 		return false
 	}
 
-	// store ref request so response handler has access to it
-	// p.requests[req.MessageData.Id] = req
-	// log.Printf("%s: Ping to: %s was sent. Message Id: %s, Message: %s", p.node.ID(), host.ID(), req.MessageData.Id, req.Message)
 	return true
 
 }
