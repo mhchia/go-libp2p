@@ -227,8 +227,7 @@ func TestSendCollation(t *testing.T) {
 		log.Println(err)
 	}
 	node0.sendProtoMessage(req, s)
-	result := <-node1.ShardProtocols[testingShardID].done
-	if result {
+	if result := <-node1.ShardProtocols[testingShardID].done; result {
 		t.Error("node1 should consider this message wrong")
 	}
 
@@ -238,5 +237,7 @@ func TestSendCollation(t *testing.T) {
 		1,
 		"123",
 	)
-	<-node1.ShardProtocols[testingShardID].done
+	if result := <-node1.ShardProtocols[testingShardID].done; !result {
+		t.Error("node1 should consider this message wrong")
+	}
 }
