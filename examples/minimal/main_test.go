@@ -170,7 +170,7 @@ func TestNotifyShards(t *testing.T) {
 	// node0, node1 := makePeerNodes(t)
 	node0, node1 := makePeerNodes(t)
 	node0ListeningShards := []ShardIDType{12, 34, 56}
-	node0.NotifyShards(node1.GetFullAddr(), node0ListeningShards)
+	node0.NotifyShards(node1.ID(), node0ListeningShards)
 	<-node1.NotifyShardsProtocol.done
 	for _, shardID := range node0ListeningShards {
 		if !node1.IsPeerListeningShard(node0.ID(), shardID) {
@@ -184,7 +184,7 @@ func TestNotifyShards(t *testing.T) {
 	}
 	// send again with different shards
 	nowNode0ListeningShards := []ShardIDType{4, 5}
-	node0.NotifyShards(node1.GetFullAddr(), nowNode0ListeningShards)
+	node0.NotifyShards(node1.ID(), nowNode0ListeningShards)
 	<-node1.NotifyShardsProtocol.done
 	for _, shardID := range nowNode0ListeningShards {
 		if !node1.IsPeerListeningShard(node0.ID(), shardID) {
@@ -204,7 +204,7 @@ func TestSendCollation(t *testing.T) {
 	node0.ListenShard(testingShardID)
 	// fail
 	node0.ShardProtocols[testingShardID].sendCollation(
-		node1.GetFullAddr(),
+		node1.ID(),
 		1,
 		"123",
 	)
@@ -233,7 +233,7 @@ func TestSendCollation(t *testing.T) {
 
 	// success
 	node0.ShardProtocols[testingShardID].sendCollation(
-		node1.GetFullAddr(),
+		node1.ID(),
 		1,
 		"123",
 	)

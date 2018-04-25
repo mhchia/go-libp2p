@@ -7,6 +7,7 @@ import (
 	"log"
 
 	inet "gx/ipfs/QmQm7WmgYCa4RSz76tKEYpRjApjnRw8ZTUVQC15b8JM4a2/go-libp2p-net"
+	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
 
 	protocol "gx/ipfs/QmZNkThpqfVXs9GNbexPrfBbXSLNYeKrE7jwFM2oqHbyqN/go-libp2p-protocol"
 
@@ -82,9 +83,8 @@ func (p *ShardProtocol) sendCollationRequest(s inet.Stream) {
 	p.done <- true
 }
 
-func (p *ShardProtocol) sendCollation(peerAddr string, number int64, blobs string) bool {
-	peerid, _ := parseAddr(peerAddr)
-	log.Printf("%s: Sending collation to: %s....", p.node.ID(), peerid)
+func (p *ShardProtocol) sendCollation(peerID peer.ID, number int64, blobs string) bool {
+	log.Printf("%s: Sending collation to: %s....", p.node.ID(), peerID)
 	// create message data
 	req := &pbmsg.SendCollationRequest{
 		ShardID: p.shardID,
@@ -94,7 +94,7 @@ func (p *ShardProtocol) sendCollation(peerAddr string, number int64, blobs strin
 
 	s, err := p.node.NewStream(
 		context.Background(),
-		peerid,
+		peerID,
 		getSendCollationRequestProtocolID(p.shardID),
 	)
 	if err != nil {

@@ -176,8 +176,9 @@ func main() {
 	node.ListenShard(30)
 	node.UnlistenShard(20)
 	log.Println("listeningShards", node.GetListeningShards())
+	targetPeerID, _ := parseAddr(*target)
 	node.ShardProtocols[testShardID].sendCollation(
-		*target,
+		targetPeerID,
 		1,
 		"blobssssss",
 	)

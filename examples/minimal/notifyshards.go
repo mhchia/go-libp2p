@@ -6,7 +6,7 @@ import (
 	"log"
 
 	inet "gx/ipfs/QmQm7WmgYCa4RSz76tKEYpRjApjnRw8ZTUVQC15b8JM4a2/go-libp2p-net"
-	pstore "gx/ipfs/QmeZVQzUrXqaszo24DAoHfGzcmCptN9JyngLkGAiEfk2x7/go-libp2p-peerstore"
+	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
 
 	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 
@@ -55,16 +55,14 @@ func (p *NotifyShardsProtocol) onRequest(s inet.Stream) {
 	p.done <- true
 }
 
-func (p *NotifyShardsProtocol) NotifyShards(peerAddr string, shardIDs []int64) bool {
-	peerid, targetAddr := parseAddr(peerAddr)
-	log.Printf("%s: Sending notifyShards to: %s....", p.node.ID(), peerid)
-	p.node.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
+func (p *NotifyShardsProtocol) NotifyShards(peerID peer.ID, shardIDs []int64) bool {
+	log.Printf("%s: Sending notifyShards to: %s....", p.node.ID(), peerID)
 	// create message data
 	req := &pbmsg.NotifyShardsRequest{
 		ShardIDs: shardIDs,
 	}
 
-	s, err := p.node.NewStream(context.Background(), peerid, notifyShardsRequest)
+	s, err := p.node.NewStream(context.Background(), peerID, notifyShardsRequest)
 	if err != nil {
 		log.Println(err)
 		return false
