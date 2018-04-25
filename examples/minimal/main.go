@@ -14,7 +14,12 @@ import (
 	crypto "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 	pstore "gx/ipfs/QmeZVQzUrXqaszo24DAoHfGzcmCptN9JyngLkGAiEfk2x7/go-libp2p-peerstore"
 
-	libp2p "github.com/libp2p/go-libp2p"
+	bhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/basic"
+	rhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/routed"
+	ds "gx/ipfs/QmPpegoMqhAEqjncrzArm7KVWAkCm78rqL2DPuNjhPrshg/go-datastore"
+	dsync "gx/ipfs/QmPpegoMqhAEqjncrzArm7KVWAkCm78rqL2DPuNjhPrshg/go-datastore/sync"
+	swarm "gx/ipfs/QmSKrS9EF4V8FpD1d5FUGQiwYLNkXcxKabWgT2aWNVnQie/go-libp2p-swarm"
+	dht "gx/ipfs/Qmdm5sm2xHCXNaWdxpjhFeStvSNMRhKQkqpBX7aDcqXtfT/go-libp2p-kad-dht"
 )
 
 const numShards = 100
@@ -35,17 +40,65 @@ func makeNode(listenPort int, randseed int64) (*Node, error) {
 		return nil, err
 	}
 
-	opts := []libp2p.Option{
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", listenPort)),
-		libp2p.Identity(priv),
-	}
-
-	basicHost, err := libp2p.New(context.Background(), opts...)
+	// Get the peer id
+	pid, err := peer.IDFromPrivateKey(priv)
 	if err != nil {
 		return nil, err
 	}
+
+	maddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", listenPort))
+	if err != nil {
+		return nil, err
+	}
+
+	// We've created the identity, now we need to store it to use the bhost constructors
+	ps := pstore.NewPeerstore()
+	ps.AddPrivKey(pid, priv)
+	ps.AddPubKey(pid, priv.GetPublic())
+
+	// Put all this together
+	ctx := context.Background()
+	netw, err := swarm.NewNetwork(ctx, []ma.Multiaddr{maddr}, pid, ps, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	hostOpts := &bhost.HostOpts{
+		NATManager: bhost.NewNATManager(netw),
+	}
+
+	basicHost, err := bhost.NewHost(ctx, netw, hostOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct a datastore (needed by the DHT). This is just a simple, in-memory thread-safe datastore.
+	dstore := dsync.MutexWrap(ds.NewMapDatastore())
+
+	// Make the DHT
+	dht := dht.NewDHT(ctx, basicHost, dstore)
+
+	// Make the routed host
+	routedHost := rhost.Wrap(basicHost, dht)
+
+	// // don't do bootstrap if it is bootstrap node itself
+	// if bootstrapPeers[0].ID != pid {
+	// 	// connect to the chosen ipfs nodes
+	// 	err = bootstrapConnect(ctx, routedHost, bootstrapPeers)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+
+	// Bootstrap the host
+	err = dht.Bootstrap(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Make a host that listens on the given multiaddress
-	node := NewNode(basicHost)
+	node := NewNode(routedHost)
+
 	log.Printf("I am %s\n", node.GetFullAddr())
 
 	return node, nil
