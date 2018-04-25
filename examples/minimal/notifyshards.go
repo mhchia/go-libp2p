@@ -55,7 +55,7 @@ func (p *NotifyShardsProtocol) onRequest(s inet.Stream) {
 	p.done <- true
 }
 
-func (p *NotifyShardsProtocol) NotifyShards(peerID peer.ID, shardIDs []int64) bool {
+func (p *NotifyShardsProtocol) NotifyShards(peerID peer.ID, shardIDs []ShardIDType) bool {
 	log.Printf("%s: Sending notifyShards to: %s....", p.node.ID(), peerID)
 	// create message data
 	req := &pbmsg.NotifyShardsRequest{

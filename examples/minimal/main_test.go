@@ -200,7 +200,7 @@ func TestNotifyShards(t *testing.T) {
 
 func TestSendCollation(t *testing.T) {
 	node0, node1 := makePeerNodes(t)
-	var testingShardID int64 = 42
+	var testingShardID ShardIDType = 42
 	node0.ListenShard(testingShardID)
 	// fail
 	node0.ShardProtocols[testingShardID].sendCollation(
@@ -212,7 +212,7 @@ func TestSendCollation(t *testing.T) {
 	node1.ListenShard(testingShardID)
 	// fail: if the collation's shardID does not correspond to the protocol's shardID,
 	//		 receiver should reject it
-	var notlistenedShardID int64 = 24
+	var notlistenedShardID ShardIDType = 24
 	req := &pbmsg.SendCollationRequest{
 		ShardID: notlistenedShardID,
 		Number:  1,
@@ -239,5 +239,39 @@ func TestSendCollation(t *testing.T) {
 	)
 	if result := <-node1.ShardProtocols[testingShardID].done; !result {
 		t.Error("node1 should consider this message wrong")
+	}
+}
+
+func TestRouting(t *testing.T) {
+	node0, err := makeTestingNode(0)
+	if err != nil {
+		t.Error("Failed to create node")
+	}
+	node1, err := makeTestingNode(1)
+	if err != nil {
+		t.Error("Failed to create node")
+	}
+	node2, err := makeTestingNode(2)
+	if err != nil {
+		t.Error("Failed to create node")
+	}
+	node1.AddPeer(node0.GetFullAddr())
+	var testingShardID ShardIDType = 12
+	node1.NotifyShards(node2.ID(), []ShardIDType{testingShardID})
+	if node2.IsPeerListeningShard(node1.ID(), testingShardID) {
+		t.Error("node1 should not be able to reach node2")
+	}
+	// node1 <-> node0 <->node2
+	node0.AddPeer(node2.GetFullAddr())
+	if node1.IsPeer(node2.ID()) {
+		t.Error("node1 should not be able to reach node2 before routing")
+	}
+	node1.NotifyShards(node2.ID(), []ShardIDType{testingShardID})
+	<-node2.NotifyShardsProtocol.done
+	if !node2.IsPeerListeningShard(node1.ID(), testingShardID) {
+		t.Error("node1 should be able to reach node2 now")
+	}
+	if !node1.IsPeer(node2.ID()) {
+		t.Error("node1 should be able a peer of node2 now")
 	}
 }
