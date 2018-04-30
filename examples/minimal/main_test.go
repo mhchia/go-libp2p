@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
-	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
+	golog "github.com/ipfs/go-log"
+	peer "github.com/libp2p/go-libp2p-peer"
+	gologging "github.com/whyrusleeping/go-logging"
 	"log"
 	"testing"
 
@@ -243,6 +245,10 @@ func TestSendCollation(t *testing.T) {
 }
 
 func TestRouting(t *testing.T) {
+	// set the logger to DEBUG, to see the process of dht.FindPeer
+	// we should be able to see something like
+	// "dht: FindPeer <peer.ID d3wzD2> true routed.go:76", if successfully found the desire peer
+	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	node0, err := makeTestingNode(0)
 	if err != nil {
 		t.Error("Failed to create node")

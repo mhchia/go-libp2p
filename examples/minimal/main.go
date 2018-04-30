@@ -7,19 +7,19 @@ import (
 	"log"
 	mrand "math/rand"
 
-	gologging "gx/ipfs/QmQvJiADDe7JR4m968MwXobTCCzUqQkP87aRHe29MEBGHV/go-logging"
-	golog "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
-	ma "gx/ipfs/QmWWQ2Txc2c6tqjsBpzg5Ar652cHPGNsQQp2SejkNmkUMb/go-multiaddr"
-	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
-	crypto "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
-	pstore "gx/ipfs/QmeZVQzUrXqaszo24DAoHfGzcmCptN9JyngLkGAiEfk2x7/go-libp2p-peerstore"
+	golog "github.com/ipfs/go-log"
+	crypto "github.com/libp2p/go-libp2p-crypto"
+	peer "github.com/libp2p/go-libp2p-peer"
+	pstore "github.com/libp2p/go-libp2p-peerstore"
+	ma "github.com/multiformats/go-multiaddr"
+	gologging "github.com/whyrusleeping/go-logging"
 
-	bhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/basic"
-	rhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/routed"
-	ds "gx/ipfs/QmPpegoMqhAEqjncrzArm7KVWAkCm78rqL2DPuNjhPrshg/go-datastore"
-	dsync "gx/ipfs/QmPpegoMqhAEqjncrzArm7KVWAkCm78rqL2DPuNjhPrshg/go-datastore/sync"
-	swarm "gx/ipfs/QmSKrS9EF4V8FpD1d5FUGQiwYLNkXcxKabWgT2aWNVnQie/go-libp2p-swarm"
-	dht "gx/ipfs/Qmdm5sm2xHCXNaWdxpjhFeStvSNMRhKQkqpBX7aDcqXtfT/go-libp2p-kad-dht"
+	ds "github.com/ipfs/go-datastore"
+	dsync "github.com/ipfs/go-datastore/sync"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	swarm "github.com/libp2p/go-libp2p-swarm"
+	bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 )
 
 const numShards = 100

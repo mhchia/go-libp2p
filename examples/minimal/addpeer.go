@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
-	inet "gx/ipfs/QmQm7WmgYCa4RSz76tKEYpRjApjnRw8ZTUVQC15b8JM4a2/go-libp2p-net"
-	pstore "gx/ipfs/QmeZVQzUrXqaszo24DAoHfGzcmCptN9JyngLkGAiEfk2x7/go-libp2p-peerstore"
+	inet "github.com/libp2p/go-libp2p-net"
+	pstore "github.com/libp2p/go-libp2p-peerstore"
 
 	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 

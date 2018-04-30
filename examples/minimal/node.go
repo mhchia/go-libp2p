@@ -2,14 +2,17 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log"
 
-	inet "gx/ipfs/QmQm7WmgYCa4RSz76tKEYpRjApjnRw8ZTUVQC15b8JM4a2/go-libp2p-net"
-	ma "gx/ipfs/QmWWQ2Txc2c6tqjsBpzg5Ar652cHPGNsQQp2SejkNmkUMb/go-multiaddr"
-	"gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
-	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
-	host "gx/ipfs/QmfCtHMCd9xFvehvHeVxtKVXJTMVTuHhyPRVHEXetn87vL/go-libp2p-host"
+	"github.com/gogo/protobuf/proto"
+	host "github.com/libp2p/go-libp2p-host"
+	inet "github.com/libp2p/go-libp2p-net"
+	peer "github.com/libp2p/go-libp2p-peer"
+	ma "github.com/multiformats/go-multiaddr"
+
+	floodsub "github.com/libp2p/go-floodsub"
 
 	protobufCodec "github.com/multiformats/go-multicodec/protobuf"
 )
@@ -64,6 +67,8 @@ type Node struct {
 	ShardManager
 	*NotifyShardsProtocol // notifyshards protocol
 	ShardProtocols        map[ShardIDType]*ShardProtocol
+
+	Floodsub *floodsub.PubSub
 	// add other protocols here...
 }
 
@@ -74,11 +79,22 @@ func NewNode(host host.Host) *Node {
 	node.initShardManager()
 	node.NotifyShardsProtocol = NewNotifyShardsProtocol(node)
 	node.ShardProtocols = make(map[ShardIDType]*ShardProtocol, numShards)
+
+	node.initFloodsub()
 	return node
 }
 
 func (n *Node) initShardManager() {
 	n.peerListeningShards = make(map[peer.ID]*ListeningShards)
+}
+
+func (n *Node) initFloodsub() {
+	ctx := context.Background()
+	service, err := floodsub.NewFloodSub(ctx, n.Host)
+	if err != nil {
+		return
+	}
+	n.Floodsub = service
 }
 
 func (n *Node) ListenShard(shardID ShardIDType) {
@@ -95,6 +111,7 @@ func (n *Node) UnlistenShard(shardID ShardIDType) {
 			// s.listeningShards[shardID] = false
 			delete(n.ShardProtocols, shardID)
 		}
+		n.RemoveStreamHandler(getSendCollationRequestProtocolID(shardID))
 	}
 }
 
