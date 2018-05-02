@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -28,23 +27,23 @@ func makeTestingNode(t *testing.T, number int) *Node {
 
 func TestListeningShards(t *testing.T) {
 	ls := NewListeningShards()
-	ls.Add(1)
-	lsSlice := ls.ToSlice()
+	ls.setShard(1)
+	lsSlice := ls.getShards()
 	if (len(lsSlice) != 1) || lsSlice[0] != ShardIDType(1) {
 		t.Error()
 	}
-	ls.Add(42)
-	if len(ls.ToSlice()) != 2 {
+	ls.setShard(42)
+	if len(ls.getShards()) != 2 {
 		t.Error()
 	}
 	// test `ToBytes` and `ListeningShardsFromBytes`
 	bytes := ls.ToBytes()
 	lsNew := ListeningShardsFromBytes(bytes)
-	if len(ls.ToSlice()) != len(lsNew.ToSlice()) {
+	if len(ls.getShards()) != len(lsNew.getShards()) {
 		t.Error()
 	}
-	for index, value := range ls.ToSlice() {
-		if value != lsNew.ToSlice()[index] {
+	for index, value := range ls.getShards() {
+		if value != lsNew.getShards()[index] {
 			t.Error()
 		}
 	}
@@ -354,7 +353,7 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	nodes := makePartiallyConnected3Nodes(t)
 
 	listeningShards := NewListeningShards()
-	listeningShards.Add(42)
+	listeningShards.setShard(42)
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
 		t.Error()
 	}
@@ -369,57 +368,23 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	}
 }
 
-const byteSize = 8 // in bits
-
-func shardIDToBitIndex(shardID ShardIDType) (byte, byte, error) {
-	if shardID >= numShards {
-		return 0, 0, fmt.Errorf("Wrong shardID %v", shardID)
-	}
-	byteIndex := byte(shardID / byteSize)
-	bitIndex := byte(shardID % byteSize)
-	return byteIndex, bitIndex, nil
-}
-
-func setShard(shardBits []byte, shardID ShardIDType) error {
-	byteIndex, bitIndex, err := shardIDToBitIndex(shardID)
-	if err != nil {
-		return fmt.Errorf("")
-	}
-	if byteIndex >= byte(len(shardBits)) {
-		return fmt.Errorf(
-			"(byteIndex=%v) >= (len(shardBits)=%v)",
-			byteIndex,
-			len(shardBits),
-		)
-	}
-	log.Printf("shardID=%v, byteIndex=%v, bitIndex=%v", shardID, byteIndex, bitIndex)
-	shardBits[byteIndex] |= (1 << bitIndex)
-	return nil
-}
-
-func getShards(shardBits []byte) []ShardIDType {
-	shards := []ShardIDType{}
-	for shardID := ShardIDType(0); shardID < numShards; shardID++ {
-		byteIndex, bitIndex, err := shardIDToBitIndex(shardID)
-		if err != nil {
-			fmt.Errorf("")
-		}
-		index := (shardBits[byteIndex] & (1 << bitIndex))
-		if index != 0 {
-			shards = append(shards, shardID)
-		}
-	}
-	return shards
-}
-
 // func
 
-func TestBitString(t *testing.T) {
-	var shardBits = make([]byte, (numShards/8)+1)
-	err := setShard(shardBits, 99)
-	if err != nil {
-		t.Error()
-	}
-	log.Printf("shardBits = %v", shardBits)
-	log.Printf("%v", getShards(shardBits))
-}
+// func TestBitString(t *testing.T) {
+// 	var shardBits = make([]byte, (numShards/8)+1)
+// 	err := setShard(shardBits, 99)
+// 	if err != nil {
+// 		t.Error()
+// 	}
+// 	err = setShard(shardBits, 42)
+// 	if err != nil {
+// 		t.Error()
+// 	}
+// 	log.Printf("shardBits = %v", shardBits)
+// 	log.Printf("%v", getShards(shardBits))
+// 	err = unsetShard(shardBits, 99)
+// 	if err != nil {
+// 		t.Error()
+// 	}
+// 	log.Printf("%v", getShards(shardBits))
+// }
