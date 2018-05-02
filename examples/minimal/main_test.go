@@ -2,27 +2,56 @@ package main
 
 import (
 	"context"
-	golog "github.com/ipfs/go-log"
-	peer "github.com/libp2p/go-libp2p-peer"
-	gologging "github.com/whyrusleeping/go-logging"
 	"log"
 	"testing"
+	"time"
+
+	golog "github.com/ipfs/go-log"
+	host "github.com/libp2p/go-libp2p-host"
+	peer "github.com/libp2p/go-libp2p-peer"
+	gologging "github.com/whyrusleeping/go-logging"
 
 	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 )
 
-func makeTestingNode(number int) (*Node, error) {
+func makeTestingNode(t *testing.T, number int) *Node {
 	listeningPort := number + 10000
-	return makeNode(listeningPort, int64(number))
-}
-
-/* unit tests */
-func TestListeningShards(t *testing.T) {
-	// TODO: add check for `ShardProtocol`
-	node, err := makeTestingNode(0)
+	node, err := makeNode(listeningPort, int64(number))
 	if err != nil {
 		t.Error("Failed to create node")
 	}
+	return node
+}
+
+/* unit tests */
+
+func TestListeningShards(t *testing.T) {
+	ls := NewListeningShards()
+	ls.Add(1)
+	lsSlice := ls.ToSlice()
+	if (len(lsSlice) != 1) || lsSlice[0] != ShardIDType(1) {
+		t.Error()
+	}
+	ls.Add(42)
+	if len(ls.ToSlice()) != 2 {
+		t.Error()
+	}
+	// test `ToBytes` and `ListeningShardsFromBytes`
+	bytes := ls.ToBytes()
+	lsNew := ListeningShardsFromBytes(bytes)
+	if len(ls.ToSlice()) != len(lsNew.ToSlice()) {
+		t.Error()
+	}
+	for index, value := range ls.ToSlice() {
+		if value != lsNew.ToSlice()[index] {
+			t.Error()
+		}
+	}
+}
+
+func TestNodeListeningShards(t *testing.T) {
+	// TODO: add check for `ShardProtocol`
+	node := makeTestingNode(t, 0)
 	var testingShardID ShardIDType = 87
 	// test `IsShardListened`
 	if node.IsShardListened(testingShardID) {
@@ -57,10 +86,7 @@ func TestListeningShards(t *testing.T) {
 }
 
 func TestPeerListeningShards(t *testing.T) {
-	node, err := makeTestingNode(0)
-	if err != nil {
-		t.Error("Failed to create node")
-	}
+	node := makeTestingNode(t, 0)
 	arbitraryPeerID := peer.ID("123456")
 	if node.IsPeer(arbitraryPeerID) {
 		t.Errorf(
@@ -142,15 +168,17 @@ func TestPeerListeningShards(t *testing.T) {
 	}
 }
 
+func connect(t *testing.T, a, b host.Host) {
+	pinfo := a.Peerstore().PeerInfo(a.ID())
+	err := b.Connect(context.Background(), pinfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func makePeerNodes(t *testing.T) (*Node, *Node) {
-	node0, err := makeTestingNode(0)
-	if err != nil {
-		t.Error("Failed to create node")
-	}
-	node1, err := makeTestingNode(1)
-	if err != nil {
-		t.Error("Failed to create node")
-	}
+	node0 := makeTestingNode(t, 0)
+	node1 := makeTestingNode(t, 1)
 	// if node0.IsPeer(node1.ID()) || node1.IsPeer(node0.ID()) {
 	// 	t.Error("Two initial nodes should not be connected without `AddPeer`")
 	// }
@@ -160,6 +188,7 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 	if !node0.IsPeer(node1.ID()) || !node1.IsPeer(node0.ID()) {
 		t.Error("Failed to add peer")
 	}
+	connect(t, node0, node1)
 	return node0, node1
 }
 
@@ -249,18 +278,9 @@ func TestRouting(t *testing.T) {
 	// we should be able to see something like
 	// "dht: FindPeer <peer.ID d3wzD2> true routed.go:76", if successfully found the desire peer
 	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
-	node0, err := makeTestingNode(0)
-	if err != nil {
-		t.Error("Failed to create node")
-	}
-	node1, err := makeTestingNode(1)
-	if err != nil {
-		t.Error("Failed to create node")
-	}
-	node2, err := makeTestingNode(2)
-	if err != nil {
-		t.Error("Failed to create node")
-	}
+	node0 := makeTestingNode(t, 0)
+	node1 := makeTestingNode(t, 1)
+	node2 := makeTestingNode(t, 2)
 	node1.AddPeer(node0.GetFullAddr())
 	var testingShardID ShardIDType = 12
 	node1.NotifyShards(node2.ID(), []ShardIDType{testingShardID})
@@ -280,4 +300,48 @@ func TestRouting(t *testing.T) {
 	if !node1.IsPeer(node2.ID()) {
 		t.Error("node1 should be able a peer of node2 now")
 	}
+}
+
+func TestPubSub(t *testing.T) {
+	// golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
+	ctx := context.Background()
+	node0, node1 := makePeerNodes(t)
+	node2 := makeTestingNode(t, 2)
+	node2.AddPeer(node1.GetFullAddr())
+	connect(t, node1, node2)
+
+	topic := "interestedShards"
+
+	subch0, err := node0.Floodsub.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// TODO: This sleep is necessary!!! Find out why
+	time.Sleep(time.Millisecond * 100)
+
+	publishMsg := "789"
+	err = node1.Floodsub.Publish(topic, []byte(publishMsg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg0, err := subch0.Next(ctx)
+	if string(msg0.Data) != publishMsg {
+		t.Fatal(err)
+	}
+	if msg0.GetFrom() != node1.ID() {
+		t.Error("Wrong ID")
+	}
+
+}
+
+func TestPubSubNotifyListeningShards(t *testing.T) {
+	// ctx := context.Background()
+	node0, node1 := makePeerNodes(t)
+	listeningShards := NewListeningShards()
+	listeningShards.Add(42)
+	log.Println(node1.GetPeerListeningShard(node0.ID()))
+	node0.NotifyListeningShards(listeningShards)
+	time.Sleep(time.Millisecond * 100)
+	log.Println(node1.GetPeerListeningShard(node0.ID()))
 }

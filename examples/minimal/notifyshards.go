@@ -54,7 +54,6 @@ func (p *NotifyShardsProtocol) onRequest(s inet.Stream) {
 	p.node.SetPeerListeningShard(remotePeerID, data.ShardIDs)
 	p.done <- true
 	s.Close()
-	log.Println("!@#, ", p.node.Network().ConnsToPeer(remotePeerID))
 }
 
 func (p *NotifyShardsProtocol) NotifyShards(peerID peer.ID, shardIDs []ShardIDType) bool {

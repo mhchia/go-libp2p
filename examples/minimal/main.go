@@ -97,7 +97,7 @@ func makeNode(listenPort int, randseed int64) (*Node, error) {
 	}
 
 	// Make a host that listens on the given multiaddress
-	node := NewNode(routedHost)
+	node := NewNode(routedHost, ctx)
 
 	log.Printf("I am %s\n", node.GetFullAddr())
 
