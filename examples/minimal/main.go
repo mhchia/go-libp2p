@@ -22,7 +22,7 @@ import (
 	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 )
 
-const numShards = 100
+const numShards ShardIDType = 100
 
 // makeNode creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.

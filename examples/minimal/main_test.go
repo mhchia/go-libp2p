@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -176,6 +177,14 @@ func connect(t *testing.T, a, b host.Host) {
 	}
 }
 
+func makeNodes(t *testing.T, number int) []*Node {
+	nodes := make([]*Node, number)
+	for i := 0; i < number; i++ {
+		nodes = append(nodes, makeTestingNode(t, i))
+	}
+	return nodes
+}
+
 func makePeerNodes(t *testing.T) (*Node, *Node) {
 	node0 := makeTestingNode(t, 0)
 	node1 := makeTestingNode(t, 1)
@@ -273,6 +282,14 @@ func TestSendCollation(t *testing.T) {
 	}
 }
 
+func makePartiallyConnected3Nodes(t *testing.T) []*Node {
+	node0, node1 := makePeerNodes(t)
+	node2 := makeTestingNode(t, 2)
+	node2.AddPeer(node1.GetFullAddr())
+	connect(t, node1, node2)
+	return [](*Node){node0, node1, node2}
+}
+
 func TestRouting(t *testing.T) {
 	// set the logger to DEBUG, to see the process of dht.FindPeer
 	// we should be able to see something like
@@ -305,14 +322,12 @@ func TestRouting(t *testing.T) {
 func TestPubSub(t *testing.T) {
 	// golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	ctx := context.Background()
-	node0, node1 := makePeerNodes(t)
-	node2 := makeTestingNode(t, 2)
-	node2.AddPeer(node1.GetFullAddr())
-	connect(t, node1, node2)
+
+	nodes := makePartiallyConnected3Nodes(t)
 
 	topic := "interestedShards"
 
-	subch0, err := node0.Floodsub.Subscribe(topic)
+	subch0, err := nodes[0].Floodsub.Subscribe(topic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +336,7 @@ func TestPubSub(t *testing.T) {
 	time.Sleep(time.Millisecond * 100)
 
 	publishMsg := "789"
-	err = node1.Floodsub.Publish(topic, []byte(publishMsg))
+	err = nodes[1].Floodsub.Publish(topic, []byte(publishMsg))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,19 +344,82 @@ func TestPubSub(t *testing.T) {
 	if string(msg0.Data) != publishMsg {
 		t.Fatal(err)
 	}
-	if msg0.GetFrom() != node1.ID() {
+	if msg0.GetFrom() != nodes[1].ID() {
 		t.Error("Wrong ID")
 	}
 
 }
 
 func TestPubSubNotifyListeningShards(t *testing.T) {
-	// ctx := context.Background()
-	node0, node1 := makePeerNodes(t)
+	nodes := makePartiallyConnected3Nodes(t)
+
 	listeningShards := NewListeningShards()
 	listeningShards.Add(42)
-	log.Println(node1.GetPeerListeningShard(node0.ID()))
-	node0.NotifyListeningShards(listeningShards)
+	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
+		t.Error()
+	}
+	nodes[0].NotifyListeningShards(listeningShards)
 	time.Sleep(time.Millisecond * 100)
-	log.Println(node1.GetPeerListeningShard(node0.ID()))
+	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 1 {
+		t.Error()
+	}
+	// ensure notifyShards message is propagated through node1
+	if len(nodes[2].GetPeerListeningShard(nodes[0].ID())) != 1 {
+		t.Error()
+	}
+}
+
+const byteSize = 8 // in bits
+
+func shardIDToBitIndex(shardID ShardIDType) (byte, byte, error) {
+	if shardID >= numShards {
+		return 0, 0, fmt.Errorf("Wrong shardID %v", shardID)
+	}
+	byteIndex := byte(shardID / byteSize)
+	bitIndex := byte(shardID % byteSize)
+	return byteIndex, bitIndex, nil
+}
+
+func setShard(shardBits []byte, shardID ShardIDType) error {
+	byteIndex, bitIndex, err := shardIDToBitIndex(shardID)
+	if err != nil {
+		return fmt.Errorf("")
+	}
+	if byteIndex >= byte(len(shardBits)) {
+		return fmt.Errorf(
+			"(byteIndex=%v) >= (len(shardBits)=%v)",
+			byteIndex,
+			len(shardBits),
+		)
+	}
+	log.Printf("shardID=%v, byteIndex=%v, bitIndex=%v", shardID, byteIndex, bitIndex)
+	shardBits[byteIndex] |= (1 << bitIndex)
+	return nil
+}
+
+func getShards(shardBits []byte) []ShardIDType {
+	shards := []ShardIDType{}
+	for shardID := ShardIDType(0); shardID < numShards; shardID++ {
+		byteIndex, bitIndex, err := shardIDToBitIndex(shardID)
+		if err != nil {
+			fmt.Errorf("")
+		}
+		index := (shardBits[byteIndex] & (1 << bitIndex))
+		if index != 0 {
+			shards = append(shards, shardID)
+		}
+	}
+	return shards
+}
+
+// func
+
+func TestBitString(t *testing.T) {
+	var shardBits = make([]byte, (numShards/8)+1)
+	err := setShard(shardBits, 99)
+	if err != nil {
+		t.Error()
+	}
+	log.Printf("shardBits = %v", shardBits)
+	log.Printf("%v", getShards(shardBits))
 }
