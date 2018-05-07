@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -41,7 +40,7 @@ func (ls *ListeningShards) unsetShard(shardID ShardIDType) error {
 			len(ls.shardBits),
 		)
 	}
-	log.Printf("shardID=%v, byteIndex=%v, bitIndex=%v", shardID, byteIndex, bitIndex)
+	// log.Printf("shardID=%v, byteIndex=%v, bitIndex=%v", shardID, byteIndex, bitIndex)
 	ls.shardBits[byteIndex] &= (^(1 << bitIndex))
 	return nil
 }
@@ -51,14 +50,14 @@ func (ls *ListeningShards) setShard(shardID ShardIDType) error {
 	if err != nil {
 		return fmt.Errorf("")
 	}
-	if byteIndex >= byte(len(ls.shardBits)) {
+	if int(byteIndex) >= len(ls.shardBits) {
 		return fmt.Errorf(
 			"(byteIndex=%v) >= (len(shardBits)=%v)",
 			byteIndex,
 			len(ls.shardBits),
 		)
 	}
-	log.Printf("shardID=%v, byteIndex=%v, bitIndex=%v", shardID, byteIndex, bitIndex)
+	// log.Printf("shardID=%v, byteIndex=%v, bitIndex=%v", shardID, byteIndex, bitIndex)
 	ls.shardBits[byteIndex] |= (1 << bitIndex)
 	return nil
 }
@@ -86,27 +85,20 @@ func NewListeningShards() *ListeningShards {
 
 func ListeningShardsFromSlice(shards []ShardIDType) *ListeningShards {
 	listeningShards := NewListeningShards()
-	for _, shardId := range shards {
-		listeningShards.setShard(shardId)
+	for _, shardID := range shards {
+		listeningShards.setShard(shardID)
 	}
 	return listeningShards
 }
 
 func ListeningShardsFromBytes(bytes []byte) *ListeningShards {
-	shardSlice := []ShardIDType{}
-	err := json.Unmarshal(bytes, &shardSlice)
-	if err != nil {
-		log.Fatal("error: ", err)
-	}
-	return ListeningShardsFromSlice(shardSlice)
+	listeningShards := NewListeningShards()
+	listeningShards.shardBits = bytes
+	return listeningShards
 }
 
 func (ls *ListeningShards) ToBytes() []byte {
-	bytes, err := json.Marshal(ls.getShards())
-	if err != nil {
-		log.Fatal("error: ", err)
-	}
-	return bytes
+	return ls.shardBits
 }
 
 type ShardManager struct {
@@ -116,7 +108,6 @@ type ShardManager struct {
 	sub      *floodsub.Subscription
 
 	peerListeningShards map[peer.ID]*ListeningShards // TODO: handle the case when peer leave
-	done                chan bool
 }
 
 func NewShardManager(node *Node) *ShardManager {
@@ -130,7 +121,6 @@ func NewShardManager(node *Node) *ShardManager {
 		Floodsub:            service,
 		sub:                 SubscribeShardNotifications(service),
 		peerListeningShards: make(map[peer.ID]*ListeningShards),
-		done:                make(chan bool),
 	}
 	p.ListenShardNotifications()
 	return p

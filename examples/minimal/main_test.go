@@ -196,45 +196,14 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 	if !node0.IsPeer(node1.ID()) || !node1.IsPeer(node0.ID()) {
 		t.Error("Failed to add peer")
 	}
-	connect(t, node0, node1)
+	// connect(t, node0, node1)
+	log.Println(node0.Network().ConnsToPeer(node1.ID()))
 	return node0, node1
 }
 
 // TODO: Need to think about the case with bootstrap nodes
 func TestAddPeer(t *testing.T) {
 	makePeerNodes(t)
-}
-
-func TestNotifyShards(t *testing.T) {
-	// node0, node1 := makePeerNodes(t)
-	node0, node1 := makePeerNodes(t)
-	node0ListeningShards := []ShardIDType{12, 34, 56}
-	node0.NotifyShards(node1.ID(), node0ListeningShards)
-	<-node1.NotifyShardsProtocol.done
-	for _, shardID := range node0ListeningShards {
-		if !node1.IsPeerListeningShard(node0.ID(), shardID) {
-			t.Errorf(
-				"Peer %v should be conscious that %v is listening to shard %v",
-				node1.ID(),
-				node0.ID(),
-				shardID,
-			)
-		}
-	}
-	// send again with different shards
-	nowNode0ListeningShards := []ShardIDType{4, 5}
-	node0.NotifyShards(node1.ID(), nowNode0ListeningShards)
-	<-node1.NotifyShardsProtocol.done
-	for _, shardID := range nowNode0ListeningShards {
-		if !node1.IsPeerListeningShard(node0.ID(), shardID) {
-			t.Errorf(
-				"Peer %v should be conscious that %v is listening to shard %v",
-				node1.ID(),
-				node0.ID(),
-				shardID,
-			)
-		}
-	}
 }
 
 func TestSendCollation(t *testing.T) {
@@ -299,8 +268,18 @@ func TestRouting(t *testing.T) {
 	node2 := makeTestingNode(t, 2)
 	node1.AddPeer(node0.GetFullAddr())
 	var testingShardID ShardIDType = 12
-	node1.NotifyShards(node2.ID(), []ShardIDType{testingShardID})
-	if node2.IsPeerListeningShard(node1.ID(), testingShardID) {
+	node0.ListenShard(testingShardID)
+	node1.ListenShard(testingShardID)
+	node2.ListenShard(testingShardID)
+	req := &pbmsg.SendCollationRequest{
+		ShardID: testingShardID,
+		Number:  1,
+		Blobs:   "123",
+	}
+	collationHash := Hash(req)
+	node1.ShardProtocols[testingShardID].sendCollationMessage(node2.ID(), req)
+	time.Sleep(time.Millisecond * 100)
+	if _, prs := node2.ShardProtocols[testingShardID].receivedCollations[collationHash]; prs {
 		t.Error("node1 should not be able to reach node2")
 	}
 	// node1 <-> node0 <->node2
@@ -308,9 +287,9 @@ func TestRouting(t *testing.T) {
 	if node1.IsPeer(node2.ID()) {
 		t.Error("node1 should not be able to reach node2 before routing")
 	}
-	node1.NotifyShards(node2.ID(), []ShardIDType{testingShardID})
-	<-node2.NotifyShardsProtocol.done
-	if !node2.IsPeerListeningShard(node1.ID(), testingShardID) {
+	node1.ShardProtocols[testingShardID].sendCollationMessage(node2.ID(), req)
+	<-node2.ShardProtocols[testingShardID].done
+	if _, prs := node2.ShardProtocols[testingShardID].receivedCollations[collationHash]; !prs {
 		t.Error("node1 should be able to reach node2 now")
 	}
 	if !node1.IsPeer(node2.ID()) {
@@ -367,24 +346,3 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 		t.Error()
 	}
 }
-
-// func
-
-// func TestBitString(t *testing.T) {
-// 	var shardBits = make([]byte, (numShards/8)+1)
-// 	err := setShard(shardBits, 99)
-// 	if err != nil {
-// 		t.Error()
-// 	}
-// 	err = setShard(shardBits, 42)
-// 	if err != nil {
-// 		t.Error()
-// 	}
-// 	log.Printf("shardBits = %v", shardBits)
-// 	log.Printf("%v", getShards(shardBits))
-// 	err = unsetShard(shardBits, 99)
-// 	if err != nil {
-// 		t.Error()
-// 	}
-// 	log.Printf("%v", getShards(shardBits))
-// }

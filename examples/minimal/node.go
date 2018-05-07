@@ -26,8 +26,7 @@ type Node struct {
 	// Shard related
 	// TODO: maybe move all sharding related things to `ShardManager`?
 	*ShardManager
-	*NotifyShardsProtocol // notifyshards protocol
-	ShardProtocols        map[ShardIDType]*ShardProtocol
+	ShardProtocols map[ShardIDType]*ShardProtocol
 	// add other protocols here...
 }
 
@@ -37,7 +36,6 @@ func NewNode(host host.Host, ctx context.Context) *Node {
 	node.AddPeerProtocol = NewAddPeerProtocol(node)
 
 	node.ShardManager = NewShardManager(node)
-	node.NotifyShardsProtocol = NewNotifyShardsProtocol(node)
 	node.ShardProtocols = make(map[ShardIDType]*ShardProtocol, numShards)
 	return node
 }
