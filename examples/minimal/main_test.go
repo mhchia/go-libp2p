@@ -9,14 +9,20 @@ import (
 	golog "github.com/ipfs/go-log"
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
+	pstore "github.com/libp2p/go-libp2p-peerstore"
+	ma "github.com/multiformats/go-multiaddr"
 	gologging "github.com/whyrusleeping/go-logging"
 
 	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 )
 
-func makeTestingNode(t *testing.T, number int) *Node {
+func makeUnbootstrappedNode(t *testing.T, number int) *Node {
+	return makeTestingNode(t, number, []pstore.PeerInfo{})
+}
+
+func makeTestingNode(t *testing.T, number int, bootstrapPeers []pstore.PeerInfo) *Node {
 	listeningPort := number + 10000
-	node, err := makeNode(listeningPort, int64(number))
+	node, err := makeNode(listeningPort, int64(number), bootstrapPeers)
 	if err != nil {
 		t.Error("Failed to create node")
 	}
@@ -51,7 +57,7 @@ func TestListeningShards(t *testing.T) {
 
 func TestNodeListeningShards(t *testing.T) {
 	// TODO: add check for `ShardProtocol`
-	node := makeTestingNode(t, 0)
+	node := makeUnbootstrappedNode(t, 0)
 	var testingShardID ShardIDType = 87
 	// test `IsShardListened`
 	if node.IsShardListened(testingShardID) {
@@ -86,7 +92,7 @@ func TestNodeListeningShards(t *testing.T) {
 }
 
 func TestPeerListeningShards(t *testing.T) {
-	node := makeTestingNode(t, 0)
+	node := makeUnbootstrappedNode(t, 0)
 	arbitraryPeerID := peer.ID("123456")
 	if node.IsPeer(arbitraryPeerID) {
 		t.Errorf(
@@ -179,14 +185,14 @@ func connect(t *testing.T, a, b host.Host) {
 func makeNodes(t *testing.T, number int) []*Node {
 	nodes := make([]*Node, number)
 	for i := 0; i < number; i++ {
-		nodes = append(nodes, makeTestingNode(t, i))
+		nodes = append(nodes, makeUnbootstrappedNode(t, i))
 	}
 	return nodes
 }
 
 func makePeerNodes(t *testing.T) (*Node, *Node) {
-	node0 := makeTestingNode(t, 0)
-	node1 := makeTestingNode(t, 1)
+	node0 := makeUnbootstrappedNode(t, 0)
+	node1 := makeUnbootstrappedNode(t, 1)
 	// if node0.IsPeer(node1.ID()) || node1.IsPeer(node0.ID()) {
 	// 	t.Error("Two initial nodes should not be connected without `AddPeer`")
 	// }
@@ -197,7 +203,6 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 		t.Error("Failed to add peer")
 	}
 	// connect(t, node0, node1)
-	log.Println(node0.Network().ConnsToPeer(node1.ID()))
 	return node0, node1
 }
 
@@ -252,7 +257,7 @@ func TestSendCollation(t *testing.T) {
 
 func makePartiallyConnected3Nodes(t *testing.T) []*Node {
 	node0, node1 := makePeerNodes(t)
-	node2 := makeTestingNode(t, 2)
+	node2 := makeUnbootstrappedNode(t, 2)
 	node2.AddPeer(node1.GetFullAddr())
 	connect(t, node1, node2)
 	return [](*Node){node0, node1, node2}
@@ -262,10 +267,9 @@ func TestRouting(t *testing.T) {
 	// set the logger to DEBUG, to see the process of dht.FindPeer
 	// we should be able to see something like
 	// "dht: FindPeer <peer.ID d3wzD2> true routed.go:76", if successfully found the desire peer
-	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
-	node0 := makeTestingNode(t, 0)
-	node1 := makeTestingNode(t, 1)
-	node2 := makeTestingNode(t, 2)
+	node0 := makeUnbootstrappedNode(t, 0)
+	node1 := makeUnbootstrappedNode(t, 1)
+	node2 := makeUnbootstrappedNode(t, 2)
 	node1.AddPeer(node0.GetFullAddr())
 	var testingShardID ShardIDType = 12
 	node0.ListenShard(testingShardID)
@@ -298,7 +302,6 @@ func TestRouting(t *testing.T) {
 }
 
 func TestPubSub(t *testing.T) {
-	// golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	ctx := context.Background()
 
 	nodes := makePartiallyConnected3Nodes(t)
@@ -343,6 +346,34 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	}
 	// ensure notifyShards message is propagated through node1
 	if len(nodes[2].GetPeerListeningShard(nodes[0].ID())) != 1 {
+		t.Error()
+	}
+}
+
+// test if nodes can find each other only with bootnodes
+func TestBootstrapIPFS(t *testing.T) {
+	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
+	node0 := makeTestingNode(t, 0, IPFS_PEERS)
+	node1 := makeTestingNode(t, 1, IPFS_PEERS)
+	node0PeerInfo := pstore.PeerInfo{
+		ID:    node0.ID(),
+		Addrs: []ma.Multiaddr{},
+	}
+	ctx := context.Background()
+	if len(node1.Network().ConnsToPeer(node0.ID())) != 0 {
+		t.Error()
+	}
+	node1.Connect(ctx, node0PeerInfo)
+	// testingShardID := ShardIDType(42)
+	// node0.ListenShard(testingShardID)
+	// node1.ListenShard(testingShardID)
+	// // fail
+	// node0.ShardProtocols[testingShardID].sendCollation(
+	// 	node1.ID(),
+	// 	1,
+	// 	"123",
+	// )
+	if len(node1.Network().ConnsToPeer(node0.ID())) == 0 {
 		t.Error()
 	}
 }

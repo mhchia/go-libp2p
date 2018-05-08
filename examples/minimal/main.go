@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"log"
-	mrand "math/rand"
 
 	golog "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
@@ -26,12 +26,13 @@ const numShards ShardIDType = 100
 
 // makeNode creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
-func makeNode(listenPort int, randseed int64) (*Node, error) {
+func makeNode(listenPort int, randseed int64, bootstrapPeers []pstore.PeerInfo) (*Node, error) {
 
 	// If the seed is zero, use real cryptographic randomness. Otherwise, use a
 	// deterministic randomness source to make generated keys stay the same
 	// across multiple runs
-	r := mrand.New(mrand.NewSource(randseed))
+	// r := mrand.New(mrand.NewSource(randseed))
+	r := rand.Reader
 
 	// Generate a key pair for this host. We will use it at least
 	// to obtain a valid host ID.
@@ -46,7 +47,7 @@ func makeNode(listenPort int, randseed int64) (*Node, error) {
 		return nil, err
 	}
 
-	maddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", listenPort))
+	maddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort))
 	if err != nil {
 		return nil, err
 	}
@@ -81,14 +82,8 @@ func makeNode(listenPort int, randseed int64) (*Node, error) {
 	// Make the routed host
 	routedHost := rhost.Wrap(basicHost, dht)
 
-	// // don't do bootstrap if it is bootstrap node itself
-	// if bootstrapPeers[0].ID != pid {
-	// 	// connect to the chosen ipfs nodes
-	// 	err = bootstrapConnect(ctx, routedHost, bootstrapPeers)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
+	// try to connect to the chosen nodes
+	bootstrapConnect(ctx, routedHost, bootstrapPeers)
 
 	// Bootstrap the host
 	err = dht.Bootstrap(ctx)
@@ -102,18 +97,6 @@ func makeNode(listenPort int, randseed int64) (*Node, error) {
 	log.Printf("I am %s\n", node.GetFullAddr())
 
 	return node, nil
-}
-
-func printPeers(ps pstore.Peerstore) {
-	log.Println("Peer ==================================")
-	for index, peerID := range ps.Peers() {
-		log.Printf(
-			"peer %d: peerId=%s, peerAddrs=%s\n",
-			index,
-			peerID,
-			ps.PeerInfo(peerID).Addrs,
-		)
-	}
 }
 
 func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
@@ -156,7 +139,7 @@ func main() {
 
 	listenPort := 10000 + *seed
 
-	node, err := makeNode(int(listenPort), *seed)
+	node, err := makeNode(int(listenPort), *seed, []pstore.PeerInfo{})
 	log.Println(node.ID())
 	if err != nil {
 		log.Fatal(err)
