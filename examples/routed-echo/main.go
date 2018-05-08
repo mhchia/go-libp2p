@@ -90,10 +90,13 @@ func makeRoutedHost(listenPort int, randseed int64, bootstrapPeers []pstore.Peer
 	// Make the routed host
 	routedHost := rhost.Wrap(basicHost, dht)
 
-	// connect to the chosen ipfs nodes
-	err = bootstrapConnect(ctx, routedHost, bootstrapPeers)
-	if err != nil {
-		return nil, err
+	// don't do bootstrap if it is bootstrap node itself
+	if bootstrapPeers[0].ID != pid {
+		// connect to the chosen ipfs nodes
+		err = bootstrapConnect(ctx, routedHost, bootstrapPeers)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Bootstrap the host

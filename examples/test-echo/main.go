@@ -10,24 +10,30 @@ import (
 	"log"
 	mrand "math/rand"
 
-	net "gx/ipfs/QmQm7WmgYCa4RSz76tKEYpRjApjnRw8ZTUVQC15b8JM4a2/go-libp2p-net"
-	gologging "gx/ipfs/QmQvJiADDe7JR4m968MwXobTCCzUqQkP87aRHe29MEBGHV/go-logging"
-	golog "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
-	ma "gx/ipfs/QmWWQ2Txc2c6tqjsBpzg5Ar652cHPGNsQQp2SejkNmkUMb/go-multiaddr"
-	peer "gx/ipfs/Qma7H6RW8wRrfZpNSXwxYGcd1E149s42FpWNpDNieSVrnU/go-libp2p-peer"
-	crypto "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
-	pstore "gx/ipfs/QmeZVQzUrXqaszo24DAoHfGzcmCptN9JyngLkGAiEfk2x7/go-libp2p-peerstore"
-	host "gx/ipfs/QmfCtHMCd9xFvehvHeVxtKVXJTMVTuHhyPRVHEXetn87vL/go-libp2p-host"
+	golog "github.com/ipfs/go-log"
+	crypto "github.com/libp2p/go-libp2p-crypto"
+	net "github.com/libp2p/go-libp2p-net"
+	peer "github.com/libp2p/go-libp2p-peer"
+	pstore "github.com/libp2p/go-libp2p-peerstore"
+	ma "github.com/multiformats/go-multiaddr"
+	gologging "github.com/whyrusleeping/go-logging"
 
-	bhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/basic"
-	rhost "gx/ipfs/QmPd5qhppUqewTQMfStvNNCFtcxiWGsnE6Vs3va6788gsX/go-libp2p/p2p/host/routed"
-	swarm "gx/ipfs/QmSKrS9EF4V8FpD1d5FUGQiwYLNkXcxKabWgT2aWNVnQie/go-libp2p-swarm"
+	swarm "github.com/libp2p/go-libp2p-swarm"
+	bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 
-	dht "gx/ipfs/Qmdm5sm2xHCXNaWdxpjhFeStvSNMRhKQkqpBX7aDcqXtfT/go-libp2p-kad-dht"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 
-	ds "gx/ipfs/QmPpegoMqhAEqjncrzArm7KVWAkCm78rqL2DPuNjhPrshg/go-datastore"
-	dsync "gx/ipfs/QmPpegoMqhAEqjncrzArm7KVWAkCm78rqL2DPuNjhPrshg/go-datastore/sync"
+	ds "github.com/ipfs/go-datastore"
+	dsync "github.com/ipfs/go-datastore/sync"
+
+	host "github.com/libp2p/go-libp2p-host"
 )
+
+// type Node struct {
+// 	Host host.Host
+// 	Dht  dht.IpfsDHT
+// }
 
 // pattern: /protocol-name/request-or-response-message/version
 const addPeerRequest = "/addPeer/addpeerreq/0.0.1"
@@ -35,7 +41,7 @@ const addPeerResponse = "/addPeer/addpeerresp/0.0.1"
 
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
-func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
+func makeBasicHost(listenPort int, randseed int64) (host.Host, *dht.IpfsDHT, error) {
 
 	// If the seed is zero, use real cryptographic randomness. Otherwise, use a
 	// deterministic randomness source to make generated keys stay the same
@@ -54,18 +60,18 @@ func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 	priv, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
 	// log.Printf("priv=%s", priv)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Get the peer id
 	pid, err := peer.IDFromPrivateKey(priv)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	maddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// We've created the identity, now we need to store it to use the bhost constructors
@@ -76,7 +82,7 @@ func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 	ctx := context.Background()
 	netw, err := swarm.NewNetwork(ctx, []ma.Multiaddr{maddr}, pid, ps, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	hostOpts := &bhost.HostOpts{
@@ -85,7 +91,7 @@ func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 
 	basicHost, err := bhost.NewHost(ctx, netw, hostOpts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	dstore := dsync.MutexWrap(ds.NewMapDatastore())
 	// Make the DHT NOTE - Using Client constructor
@@ -98,14 +104,14 @@ func makeBasicHost(listenPort int, randseed int64) (host.Host, error) {
 
 	// Now we can build a full multiaddress to reach this host
 	// by encapsulating both addresses:
-	addr := basicHost.Addrs()[0]
+	addr := routedHost.Addrs()[0]
 	log.Printf("addr=%s\n", addr)
 	fullAddr := addr.Encapsulate(hostAddr)
 	log.Printf("I am %s\n", fullAddr)
 
 	log.Printf("Now run \"./echo -l %d -d %s\" on a different terminal\n", listenPort+1, fullAddr)
 
-	return routedHost, nil
+	return routedHost, dht, nil
 }
 
 func printPeers(ps pstore.Peerstore) {
@@ -144,7 +150,7 @@ func main() {
 	}
 
 	// Make a host that listens on the given multiaddress
-	ha, err := makeBasicHost(*listenF, *seed)
+	ha, dht, err := makeBasicHost(*listenF, *seed)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -165,6 +171,10 @@ func main() {
 		} else {
 			s.Close()
 		}
+		ctx := context.Background()
+		p, _ := dht.FindPeersConnectedToPeer(ctx, remotePeerId)
+		log.Println("p=", <-p)
+		log.Println(dht)
 		// TODO: should do other checks to become peer
 		ha.Peerstore().AddAddr(remotePeerId, remotePeerMultiaddr, pstore.PermanentAddrTTL)
 		printPeers(ha.Peerstore())
@@ -203,7 +213,7 @@ func main() {
 	// We have a peer ID and a targetAddr so we add it to the peerstore
 	// so LibP2P knows how to contact it
 	ha.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
-	log.Println("ha.Peerstore=", ha.Peerstore().Peers())
+	log.Println("my Peerstore=", ha.Peerstore().Peers())
 	printPeers(ha.Peerstore())
 	log.Println("opening stream")
 	// make a new stream from host B to host A
@@ -225,6 +235,7 @@ func main() {
 	}
 
 	log.Printf("read reply: %q\n", out)
+	select {} // hang forever
 }
 
 // doEcho reads a line of data a stream and writes it back
