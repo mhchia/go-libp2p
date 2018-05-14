@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"log"
+	mrand "math/rand"
 
 	golog "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
@@ -22,6 +22,8 @@ import (
 	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 )
 
+import "C"
+
 const numShards ShardIDType = 100
 
 // makeNode creates a LibP2P host with a random peer ID listening on the
@@ -31,8 +33,8 @@ func makeNode(listenPort int, randseed int64, bootstrapPeers []pstore.PeerInfo) 
 	// If the seed is zero, use real cryptographic randomness. Otherwise, use a
 	// deterministic randomness source to make generated keys stay the same
 	// across multiple runs
-	// r := mrand.New(mrand.NewSource(randseed))
-	r := rand.Reader
+	r := mrand.New(mrand.NewSource(randseed))
+	// r := rand.Reader
 
 	// Generate a key pair for this host. We will use it at least
 	// to obtain a valid host ID.
@@ -124,6 +126,44 @@ func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
 	)
 	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
 	return peerid, targetAddr
+}
+
+//export Greet
+func Greet() {
+	log.Println("HI")
+}
+
+//export RunNode
+func RunNode(seed int, target string) {
+	listenPort := 10000 + seed
+
+	node, err := makeNode(int(listenPort), int64(seed), []pstore.PeerInfo{})
+	log.Println(node.ID())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	testShardID := ShardIDType(87)
+	node.ListenShard(testShardID)
+
+	if target == "" {
+		log.Println("listening for connections")
+		select {} // hang forever
+	}
+
+	/**** This is where the listener code ends ****/
+	node.AddPeer(target)
+	node.ListenShard(20)
+	node.ListenShard(30)
+	node.UnlistenShard(20)
+	log.Println("listeningShards", node.GetListeningShards())
+	targetPeerID, _ := parseAddr(target)
+	node.ShardProtocols[testShardID].sendCollation(
+		targetPeerID,
+		1,
+		"blobssssss",
+	)
+	select {}
 }
 
 func main() {

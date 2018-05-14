@@ -173,6 +173,16 @@ func (n *ShardManager) IsPeerListeningShard(peerID peer.ID, shardID ShardIDType)
 	return InShards(shardID, shards)
 }
 
+func (n *ShardManager) GetPeersInShard(shardID ShardIDType) []peer.ID {
+	peers := []peer.ID{}
+	for _, peerID := range n.node.Peerstore().Peers() {
+		if n.IsPeerListeningShard(peerID, shardID) {
+			peers = append(peers, peerID)
+		}
+	}
+	return peers
+}
+
 // PubSub related
 
 func (n *ShardManager) ListenShardNotifications() {

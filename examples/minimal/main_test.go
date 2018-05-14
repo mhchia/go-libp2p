@@ -206,7 +206,6 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 	return node0, node1
 }
 
-// TODO: Need to think about the case with bootstrap nodes
 func TestAddPeer(t *testing.T) {
 	makePeerNodes(t)
 }
@@ -350,11 +349,31 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	}
 }
 
+func TestPubSubDuplicateMessages(t *testing.T) {
+	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
+	nodes := makePartiallyConnected3Nodes(t)
+	nodes = append(nodes, makeTestingNode(t, 3, []pstore.PeerInfo{}))
+	connect(t, nodes[0], nodes[3])
+	connect(t, nodes[2], nodes[3])
+
+	listeningShards := NewListeningShards()
+	listeningShards.setShard(42)
+	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
+		t.Error()
+	}
+	nodes[1].NotifyListeningShards(listeningShards)
+	time.Sleep(time.Millisecond * 100)
+
+}
+
 // test if nodes can find each other only with bootnodes
 func TestBootstrapIPFS(t *testing.T) {
-	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
-	node0 := makeTestingNode(t, 0, IPFS_PEERS)
-	node1 := makeTestingNode(t, 1, IPFS_PEERS)
+	golog.SetAllLoggers(gologging.DEBUG)            // Change to DEBUG for extra info
+	node0 := makeTestingNode(t, 0, IPFS_PEERS[1:])  // connect to boostrapping nodes
+	node1 := makeTestingNode(t, 1, IPFS_PEERS[0:1]) // connect to local ipfs node
+	log.Println("!@#", node0.GetFullAddr())
+	log.Println("!@#", node1.GetFullAddr())
+	// return
 	node0PeerInfo := pstore.PeerInfo{
 		ID:    node0.ID(),
 		Addrs: []ma.Multiaddr{},
