@@ -347,6 +347,12 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	if len(nodes[2].GetPeerListeningShard(nodes[0].ID())) != 1 {
 		t.Error()
 	}
+	listeningShards.unsetShard(42)
+	nodes[0].NotifyListeningShards(listeningShards)
+	time.Sleep(time.Millisecond * 100)
+	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
+		t.Error()
+	}
 }
 
 func TestPubSubDuplicateMessages(t *testing.T) {

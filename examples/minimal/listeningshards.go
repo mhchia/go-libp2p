@@ -188,25 +188,25 @@ func (n *ShardManager) GetPeersInShard(shardID ShardIDType) []peer.ID {
 func (n *ShardManager) ListenShardNotifications() {
 	ctx := context.Background()
 	go func() {
-		// for {
-		if n.sub == nil {
-			return
+		for {
+			if n.sub == nil {
+				return
+			}
+			msg, err := n.sub.Next(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+			peerID := msg.GetFrom()
+			// TODO: maybe should check if `peerID` is the node itself
+			listeningShards := ListeningShardsFromBytes(msg.GetData())
+			n.SetPeerListeningShard(peerID, listeningShards.getShards())
+			log.Printf(
+				"%v: receive: peerID=%v, listeningShards=%v",
+				n.node.ID(),
+				peerID,
+				listeningShards,
+			)
 		}
-		msg, err := n.sub.Next(ctx)
-		if err != nil {
-			log.Fatal(err)
-		}
-		peerID := msg.GetFrom()
-		// TODO: maybe should check if `peerID` is the node itself
-		listeningShards := ListeningShardsFromBytes(msg.GetData())
-		n.SetPeerListeningShard(peerID, listeningShards.getShards())
-		log.Printf(
-			"%v: receive: peerID=%v, listeningShards=%v",
-			n.node.ID(),
-			peerID,
-			listeningShards,
-		)
-		// }
 	}()
 }
 
