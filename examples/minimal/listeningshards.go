@@ -188,6 +188,7 @@ func (n *ShardManager) GetPeersInShard(shardID ShardIDType) []peer.ID {
 func (n *ShardManager) ListenShardNotifications() {
 	ctx := context.Background()
 	go func() {
+		// for {
 		if n.sub == nil {
 			return
 		}
@@ -205,6 +206,7 @@ func (n *ShardManager) ListenShardNotifications() {
 			peerID,
 			listeningShards,
 		)
+		// }
 	}()
 }
 

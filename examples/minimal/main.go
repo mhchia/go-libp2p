@@ -22,7 +22,7 @@ import (
 	rhost "github.com/libp2p/go-libp2p/p2p/host/routed"
 )
 
-import "C"
+// import "C"
 
 const numShards ShardIDType = 100
 
@@ -128,12 +128,6 @@ func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
 	return peerid, targetAddr
 }
 
-//export Greet
-func Greet() {
-	log.Println("HI")
-}
-
-//export RunNode
 func RunNode(seed int, target string) {
 	listenPort := 10000 + seed
 

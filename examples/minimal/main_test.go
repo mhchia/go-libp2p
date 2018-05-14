@@ -369,7 +369,7 @@ func TestPubSubDuplicateMessages(t *testing.T) {
 // test if nodes can find each other only with bootnodes
 func TestBootstrapIPFS(t *testing.T) {
 	golog.SetAllLoggers(gologging.DEBUG)            // Change to DEBUG for extra info
-	node0 := makeTestingNode(t, 0, IPFS_PEERS[1:])  // connect to boostrapping nodes
+	node0 := makeTestingNode(t, 0, IPFS_PEERS[0:1]) // connect to boostrapping nodes
 	node1 := makeTestingNode(t, 1, IPFS_PEERS[0:1]) // connect to local ipfs node
 	log.Println("!@#", node0.GetFullAddr())
 	log.Println("!@#", node1.GetFullAddr())
