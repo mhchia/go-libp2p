@@ -412,9 +412,8 @@ func TestRoutingWithIPFSNodes(t *testing.T) {
 		t.Error()
 	}
 
-	log.Print("SHIT1")
 	node1.Connect(context.Background(), node0PeerInfo)
-	log.Print("SHIT2")
+
 	if len(node1.Network().ConnsToPeer(node0.ID())) == 0 {
 		t.Error()
 	}
