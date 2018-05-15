@@ -14,8 +14,8 @@ import (
 
 var (
 	IPFS_PEERS = convertPeers([]string{
-		"/ip4/127.0.0.1/tcp/4002/ipfs/QmVy6eAgECmBpCozy7Y4rFTf6FibfrMyv5gRWScaCFs2KT",
-		"/ip4/127.0.0.1/tcp/4001/ipfs/QmT57XGvt8PniHuJ6SNrjA2GefsQpGUMC1A2GLmRWmYixT", // our own node
+		"/ip4/127.0.0.1/tcp/4001/ipfs/QmXa1ncfGc9RQotUAyN3Gb4ar7WXZ4DEb2wPZsSybkK1sf",
+		"/ip4/127.0.0.1/tcp/4002/ipfs/QmbL37Cg7USSPPRu8uXtAL83dupVhyaHq4PrPhRAqxZTJ6", // our own node
 		// "/ip4/104.131.131.82/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 		// "/ip4/104.236.179.241/tcp/4001/ipfs/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
 		// "/ip4/128.199.219.111/tcp/4001/ipfs/QmSoLSafTMBsPKadTEgaXctDQVcqN88CNLHXMkTNwMKPnu",

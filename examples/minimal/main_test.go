@@ -379,62 +379,43 @@ func TestPubSubDuplicateMessages(t *testing.T) {
 
 }
 
-// test if nodes can find each other only with bootnodes
-func TestBootstrapIPFS(t *testing.T) {
-	golog.SetAllLoggers(gologging.DEBUG)            // Change to DEBUG for extra info
-	node0 := makeTestingNode(t, 0, IPFS_PEERS[0:1]) // connect to boostrapping nodes
-	node1 := makeTestingNode(t, 1, IPFS_PEERS[0:1]) // connect to local ipfs node
-	log.Println("!@#", node0.GetFullAddr())
-	log.Println("!@#", node1.GetFullAddr())
-	// return
+// test if nodes can find each other with ipfs nodes
+func TestRoutingWithIPFSNodes(t *testing.T) {
+	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
+	ipfsPeer0 := IPFS_PEERS[0]
+	ipfsPeer1 := IPFS_PEERS[1]
+
+	node0 := makeUnbootstrappedNode(t, 0)
+	node0.Peerstore().AddAddrs(ipfsPeer0.ID, ipfsPeer0.Addrs, pstore.PermanentAddrTTL)
+	node0.Connect(context.Background(), ipfsPeer0)
+	if len(node0.Network().ConnsToPeer(ipfsPeer0.ID)) == 0 {
+		t.Error()
+	}
+	node1 := makeUnbootstrappedNode(t, 1)
+	node1.Peerstore().AddAddrs(ipfsPeer1.ID, ipfsPeer1.Addrs, pstore.PermanentAddrTTL)
+	node1.Connect(context.Background(), ipfsPeer1)
+	if len(node1.Network().ConnsToPeer(ipfsPeer1.ID)) == 0 {
+		t.Error()
+	}
 	node0PeerInfo := pstore.PeerInfo{
 		ID:    node0.ID(),
 		Addrs: []ma.Multiaddr{},
 	}
-	ctx := context.Background()
+	// ensure connection: node0 <-> ipfsPeer0 <-> ipfsPeer1 <-> node1
+	if len(node0.Network().ConnsToPeer(ipfsPeer1.ID)) != 0 {
+		t.Error()
+	}
+	if len(node1.Network().ConnsToPeer(ipfsPeer0.ID)) != 0 {
+		t.Error()
+	}
 	if len(node1.Network().ConnsToPeer(node0.ID())) != 0 {
 		t.Error()
 	}
-	node1.Connect(ctx, node0PeerInfo)
-	// testingShardID := ShardIDType(42)
-	// node0.ListenShard(testingShardID)
-	// node1.ListenShard(testingShardID)
-	// // fail
-	// node0.ShardProtocols[testingShardID].sendCollation(
-	// 	node1.ID(),
-	// 	1,
-	// 	"123",
-	// )
+
+	log.Print("SHIT1")
+	node1.Connect(context.Background(), node0PeerInfo)
+	log.Print("SHIT2")
 	if len(node1.Network().ConnsToPeer(node0.ID())) == 0 {
 		t.Error()
 	}
-}
-
-func TestSendCollation100Shards(t *testing.T) {
-	node0, node1 := makePeerNodes(t)
-	blobSize := 1000000
-	var numCollations ShardIDType = 1
-	for i := ShardIDType(0); i < numShards; i++ {
-		node0.ListenShard(i)
-		node1.ListenShard(i)
-	}
-	// time1 := time.Now()
-	for i := ShardIDType(0); i < numShards; i++ {
-		go func(shardID ShardIDType) {
-			for j := ShardIDType(0); j < numCollations; j++ {
-				node0.ShardProtocols[shardID].sendCollation(
-					node1.ID(),
-					j,
-					string(make([]byte, blobSize)),
-				)
-			}
-		}(i)
-	}
-	for i := ShardIDType(0); i < numShards; i++ {
-		for j := ShardIDType(0); j < numCollations; j++ {
-			<-node1.ShardProtocols[i].done
-		}
-	}
-	// select {}
-	log.Println("done")
 }
