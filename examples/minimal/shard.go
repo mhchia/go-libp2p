@@ -79,7 +79,8 @@ func (p *ShardProtocol) receiveCollationRequest(s inet.Stream) {
 		p.done <- false
 		return
 	}
-	p.receivedCollations[Hash(data)] = data
+	// TODO: temporarily comment out, to avoid the excessive memory usage
+	// p.receivedCollations[Hash(data)] = data
 	log.Printf(
 		"%s: Received sendCollationRequest from %s. Message: shardID=%v, number=%v, blobs=%v",
 		s.Conn().LocalPeer(),
@@ -92,7 +93,6 @@ func (p *ShardProtocol) receiveCollationRequest(s inet.Stream) {
 }
 
 func (p *ShardProtocol) sendCollation(peerID peer.ID, number int64, blobs string) bool {
-	log.Printf("%s: Sending collation to: %s....", p.node.ID(), peerID)
 	// create message data
 	req := &pbmsg.SendCollationRequest{
 		ShardID: p.shardID,

@@ -114,7 +114,7 @@ func TestPeerListeningShards(t *testing.T) {
 	node.AddPeerListeningShard(arbitraryPeerID, numShards)
 	if node.IsPeerListeningShard(arbitraryPeerID, numShards) {
 		t.Errorf(
-			"Peer %v should be able to listen to shardID bigger than %v",
+			"Peer %v should not be able to listen to shardID bigger than %v",
 			arbitraryPeerID,
 			numShards,
 		)
@@ -202,7 +202,7 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 	if !node0.IsPeer(node1.ID()) || !node1.IsPeer(node0.ID()) {
 		t.Error("Failed to add peer")
 	}
-	// connect(t, node0, node1)
+	connect(t, node0, node1)
 	return node0, node1
 }
 
@@ -334,6 +334,7 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	nodes := makePartiallyConnected3Nodes(t)
 
 	listeningShards := NewListeningShards()
+	// ensure notifyShards message is propagated through node1
 	listeningShards.setShard(42)
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
 		t.Error()
@@ -343,10 +344,16 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 1 {
 		t.Error()
 	}
-	// ensure notifyShards message is propagated through node1
 	if len(nodes[2].GetPeerListeningShard(nodes[0].ID())) != 1 {
 		t.Error()
 	}
+	nodes[1].NotifyListeningShards(listeningShards)
+	time.Sleep(time.Millisecond * 100)
+	if len(nodes[2].GetPeersInShard(42)) != 2 {
+		t.Error()
+	}
+
+	// test unsetShard with notifying
 	listeningShards.unsetShard(42)
 	nodes[0].NotifyListeningShards(listeningShards)
 	time.Sleep(time.Millisecond * 100)
@@ -401,4 +408,33 @@ func TestBootstrapIPFS(t *testing.T) {
 	if len(node1.Network().ConnsToPeer(node0.ID())) == 0 {
 		t.Error()
 	}
+}
+
+func TestSendCollation100Shards(t *testing.T) {
+	node0, node1 := makePeerNodes(t)
+	blobSize := 1000000
+	var numCollations ShardIDType = 1
+	for i := ShardIDType(0); i < numShards; i++ {
+		node0.ListenShard(i)
+		node1.ListenShard(i)
+	}
+	// time1 := time.Now()
+	for i := ShardIDType(0); i < numShards; i++ {
+		go func(shardID ShardIDType) {
+			for j := ShardIDType(0); j < numCollations; j++ {
+				node0.ShardProtocols[shardID].sendCollation(
+					node1.ID(),
+					j,
+					string(make([]byte, blobSize)),
+				)
+			}
+		}(i)
+	}
+	for i := ShardIDType(0); i < numShards; i++ {
+		for j := ShardIDType(0); j < numCollations; j++ {
+			<-node1.ShardProtocols[i].done
+		}
+	}
+	// select {}
+	log.Println("done")
 }

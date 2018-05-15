@@ -33,7 +33,7 @@ func (ls *ListeningShards) unsetShard(shardID ShardIDType) error {
 	if err != nil {
 		return fmt.Errorf("")
 	}
-	if byteIndex >= byte(len(ls.shardBits)) {
+	if int(byteIndex) >= len(ls.shardBits) {
 		return fmt.Errorf(
 			"(byteIndex=%v) >= (len(shardBits)=%v)",
 			byteIndex,
@@ -62,15 +62,19 @@ func (ls *ListeningShards) setShard(shardID ShardIDType) error {
 	return nil
 }
 
+func (ls *ListeningShards) isShardSet(shardID ShardIDType) bool {
+	byteIndex, bitIndex, err := shardIDToBitIndex(shardID)
+	if err != nil {
+		fmt.Errorf("")
+	}
+	index := ls.shardBits[byteIndex] & (1 << bitIndex)
+	return index != 0
+}
+
 func (ls *ListeningShards) getShards() []ShardIDType {
 	shards := []ShardIDType{}
 	for shardID := ShardIDType(0); shardID < numShards; shardID++ {
-		byteIndex, bitIndex, err := shardIDToBitIndex(shardID)
-		if err != nil {
-			fmt.Errorf("")
-		}
-		index := (ls.shardBits[byteIndex] & (1 << bitIndex))
-		if index != 0 {
+		if ls.isShardSet(shardID) {
 			shards = append(shards, shardID)
 		}
 	}
@@ -171,6 +175,16 @@ func (n *ShardManager) IsPeerListeningShard(peerID peer.ID, shardID ShardIDType)
 	}
 	shards := n.GetPeerListeningShard(peerID)
 	return InShards(shardID, shards)
+}
+
+func (n *ShardManager) GetNodesInShard(shardID ShardIDType) []peer.ID {
+	peers := []peer.ID{}
+	for peerID, listeningShards := range n.peerListeningShards {
+		if listeningShards.isShardSet(shardID) {
+			peers = append(peers, peerID)
+		}
+	}
+	return peers
 }
 
 func (n *ShardManager) GetPeersInShard(shardID ShardIDType) []peer.ID {
