@@ -52,6 +52,7 @@ func (n *Node) sendProtoMessage(data proto.Message, s inet.Stream) bool {
 		return false
 	}
 	writer.Flush()
+	// writer.Flush()
 	return true
 }
 

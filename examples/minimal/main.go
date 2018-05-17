@@ -179,8 +179,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	testShardID := ShardIDType(87)
-	node.ListenShard(testShardID)
+	var numCollations ShardIDType = 100
+	blobSize := 1000000
+	for i := ShardIDType(0); i < numShards; i++ {
+		node.ListenShard(i)
+	}
 
 	if *target == "" {
 		log.Println("listening for connections")
@@ -189,15 +192,18 @@ func main() {
 
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
-	node.ListenShard(20)
-	node.ListenShard(30)
-	node.UnlistenShard(20)
-	log.Println("listeningShards", node.GetListeningShards())
 	targetPeerID, _ := parseAddr(*target)
-	node.ShardProtocols[testShardID].sendCollation(
-		targetPeerID,
-		1,
-		"blobssssss",
-	)
+	// time1 := time.Now()
+	for i := ShardIDType(0); i < numShards; i++ {
+		go func(shardID ShardIDType) {
+			for j := ShardIDType(0); j < numCollations; j++ {
+				node.ShardProtocols[shardID].sendCollation(
+					targetPeerID,
+					j,
+					string(make([]byte, blobSize)),
+				)
+			}
+		}(i)
+	}
 	select {}
 }

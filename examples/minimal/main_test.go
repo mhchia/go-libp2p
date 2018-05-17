@@ -202,7 +202,7 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 	if !node0.IsPeer(node1.ID()) || !node1.IsPeer(node0.ID()) {
 		t.Error("Failed to add peer")
 	}
-	connect(t, node0, node1)
+	// connect(t, node0, node1)
 	return node0, node1
 }
 
@@ -211,6 +211,8 @@ func TestAddPeer(t *testing.T) {
 }
 
 func TestSendCollation(t *testing.T) {
+	log.Println("123")
+	time.Sleep(time.Millisecond * 100)
 	node0, node1 := makePeerNodes(t)
 	var testingShardID ShardIDType = 42
 	node0.ListenShard(testingShardID)
@@ -220,8 +222,10 @@ func TestSendCollation(t *testing.T) {
 		1,
 		"123",
 	)
+	log.Println("1")
 
 	node1.ListenShard(testingShardID)
+	log.Println("2")
 	// fail: if the collation's shardID does not correspond to the protocol's shardID,
 	//		 receiver should reject it
 	var notlistenedShardID ShardIDType = 24
@@ -230,6 +234,7 @@ func TestSendCollation(t *testing.T) {
 		Number:  1,
 		Blobs:   "123",
 	}
+	log.Println("3")
 	s, err := node0.NewStream(
 		context.Background(),
 		node1.ID(),
@@ -238,20 +243,29 @@ func TestSendCollation(t *testing.T) {
 	if err != nil {
 		log.Println(err)
 	}
-	node0.sendProtoMessage(req, s)
+	log.Println("4")
+	if !node0.sendProtoMessage(req, s) {
+		t.Errorf("failed to send collation message %v", req)
+	}
+	log.Println("5")
 	if result := <-node1.ShardProtocols[testingShardID].done; result {
 		t.Error("node1 should consider this message wrong")
 	}
-
+	log.Println("6")
 	// success
-	node0.ShardProtocols[testingShardID].sendCollation(
+	succeed := node0.ShardProtocols[testingShardID].sendCollation(
 		node1.ID(),
 		1,
 		"123",
 	)
+	if !succeed {
+		t.Error("failed to send collation")
+	}
+	log.Println("7")
 	if result := <-node1.ShardProtocols[testingShardID].done; !result {
 		t.Error("node1 should consider this message wrong")
 	}
+	log.Println("8")
 }
 
 func makePartiallyConnected3Nodes(t *testing.T) []*Node {
@@ -279,22 +293,15 @@ func TestRouting(t *testing.T) {
 		Number:  1,
 		Blobs:   "123",
 	}
-	collationHash := Hash(req)
 	node1.ShardProtocols[testingShardID].sendCollationMessage(node2.ID(), req)
-	time.Sleep(time.Millisecond * 100)
-	if _, prs := node2.ShardProtocols[testingShardID].receivedCollations[collationHash]; prs {
-		t.Error("node1 should not be able to reach node2")
-	}
-	// node1 <-> node0 <->node2
+	time.Sleep(time.Millisecond * 1000)
+	// node1 <-> node0 <-> node2
 	node0.AddPeer(node2.GetFullAddr())
 	if node1.IsPeer(node2.ID()) {
 		t.Error("node1 should not be able to reach node2 before routing")
 	}
 	node1.ShardProtocols[testingShardID].sendCollationMessage(node2.ID(), req)
 	<-node2.ShardProtocols[testingShardID].done
-	if _, prs := node2.ShardProtocols[testingShardID].receivedCollations[collationHash]; !prs {
-		t.Error("node1 should be able to reach node2 now")
-	}
 	if !node1.IsPeer(node2.ID()) {
 		t.Error("node1 should be able a peer of node2 now")
 	}
@@ -365,9 +372,15 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 func TestPubSubDuplicateMessages(t *testing.T) {
 	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	nodes := makePartiallyConnected3Nodes(t)
+	// 0 - 1 - 2 - 3
+	//  \          /
+	//   \________/
 	nodes = append(nodes, makeTestingNode(t, 3, []pstore.PeerInfo{}))
+	nodes[2].AddPeer(nodes[3].GetFullAddr())
 	connect(t, nodes[0], nodes[3])
-	connect(t, nodes[2], nodes[3])
+	connect(t, nodes[0], nodes[2])
+	connect(t, nodes[1], nodes[3])
+	// connect(t, nodes[2], nodes[3])
 
 	listeningShards := NewListeningShards()
 	listeningShards.setShard(42)
@@ -376,11 +389,10 @@ func TestPubSubDuplicateMessages(t *testing.T) {
 	}
 	nodes[1].NotifyListeningShards(listeningShards)
 	time.Sleep(time.Millisecond * 100)
-
 }
 
 // test if nodes can find each other with ipfs nodes
-func TestRoutingWithIPFSNodes(t *testing.T) {
+func TestWithIPFSNodesRouting(t *testing.T) {
 	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	ipfsPeer0 := IPFS_PEERS[0]
 	ipfsPeer1 := IPFS_PEERS[1]
@@ -417,4 +429,33 @@ func TestRoutingWithIPFSNodes(t *testing.T) {
 	if len(node1.Network().ConnsToPeer(node0.ID())) == 0 {
 		t.Error()
 	}
+}
+
+func Test100ShardsSendCollation(t *testing.T) {
+	node0, node1 := makePeerNodes(t)
+	blobSize := 1000000
+	var numCollations ShardIDType = 1
+	for i := ShardIDType(0); i < numShards; i++ {
+		node0.ListenShard(i)
+		node1.ListenShard(i)
+	}
+	// time1 := time.Now()
+	for i := ShardIDType(0); i < numShards; i++ {
+		go func(shardID ShardIDType) {
+			for j := ShardIDType(0); j < numCollations; j++ {
+				node0.ShardProtocols[shardID].sendCollation(
+					node1.ID(),
+					j,
+					string(make([]byte, blobSize)),
+				)
+			}
+		}(i)
+	}
+	for i := ShardIDType(0); i < numShards; i++ {
+		for j := ShardIDType(0); j < numCollations; j++ {
+			<-node1.ShardProtocols[i].done
+		}
+	}
+	// select {}
+	log.Println("done")
 }
