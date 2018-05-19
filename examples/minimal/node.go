@@ -26,7 +26,6 @@ type Node struct {
 	// Shard related
 	// TODO: maybe move all sharding related things to `ShardManager`?
 	*ShardManager
-	ShardProtocols map[ShardIDType]*ShardProtocol
 	// add other protocols here...
 }
 
@@ -36,7 +35,6 @@ func NewNode(host host.Host, ctx context.Context) *Node {
 	node.AddPeerProtocol = NewAddPeerProtocol(node)
 
 	node.ShardManager = NewShardManager(node)
-	node.ShardProtocols = make(map[ShardIDType]*ShardProtocol, numShards)
 	return node
 }
 
@@ -78,7 +76,7 @@ func (n *Node) IsPeer(peerID peer.ID) bool {
 func (n *Node) ListenShard(shardID ShardIDType) {
 	if !(n.IsShardListened(shardID)) {
 		n.AddPeerListeningShard(n.ID(), shardID)
-		n.ShardProtocols[shardID] = NewShardProtocol(n, shardID)
+
 		// shardCollations protocol
 		n.SubscribeShardCollations(shardID)
 		n.ListenShardCollations(shardID)
@@ -88,11 +86,9 @@ func (n *Node) ListenShard(shardID ShardIDType) {
 func (n *Node) UnlistenShard(shardID ShardIDType) {
 	if n.IsShardListened(shardID) {
 		n.RemovePeerListeningShard(n.ID(), shardID)
-		if _, prs := n.ShardProtocols[shardID]; prs {
-			// s.listeningShards[shardID] = false
-			delete(n.ShardProtocols, shardID)
-		}
-		n.RemoveStreamHandler(getCollationProtocolID(shardID))
+
+		// shardCollations protocol
+		n.UnsubscribeShardCollations(shardID)
 	}
 }
 

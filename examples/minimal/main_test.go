@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"testing"
 	"time"
 
@@ -12,17 +11,19 @@ import (
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 	gologging "github.com/whyrusleeping/go-logging"
-
-	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 )
 
-func makeUnbootstrappedNode(t *testing.T, number int) *Node {
-	return makeTestingNode(t, number, []pstore.PeerInfo{})
+func makeUnbootstrappedNode(t *testing.T, ctx context.Context, number int) *Node {
+	return makeTestingNode(t, ctx, number, []pstore.PeerInfo{})
 }
 
-func makeTestingNode(t *testing.T, number int, bootstrapPeers []pstore.PeerInfo) *Node {
+func makeTestingNode(
+	t *testing.T,
+	ctx context.Context,
+	number int,
+	bootstrapPeers []pstore.PeerInfo) *Node {
 	listeningPort := number + 10000
-	node, err := makeNode(listeningPort, int64(number), bootstrapPeers)
+	node, err := makeNode(ctx, listeningPort, int64(number), bootstrapPeers)
 	if err != nil {
 		t.Error("Failed to create node")
 	}
@@ -56,8 +57,10 @@ func TestListeningShards(t *testing.T) {
 }
 
 func TestNodeListeningShards(t *testing.T) {
-	// TODO: add check for `ShardProtocol`
-	node := makeUnbootstrappedNode(t, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	node := makeUnbootstrappedNode(t, ctx, 0)
 	var testingShardID ShardIDType = 87
 	// test `IsShardListened`
 	if node.IsShardListened(testingShardID) {
@@ -68,8 +71,11 @@ func TestNodeListeningShards(t *testing.T) {
 	if !node.IsShardListened(testingShardID) {
 		t.Errorf("Shard %v should have been listened", testingShardID)
 	}
-	if _, prs := node.ShardProtocols[testingShardID]; !prs {
-		t.Errorf("ShardProtocol[%v] should exist", testingShardID)
+	if !node.IsShardCollationsSubscribed(testingShardID) {
+		t.Errorf(
+			"shardCollations in shard [%v] should be subscribed",
+			testingShardID,
+		)
 	}
 	anotherShardID := testingShardID + 1
 	node.ListenShard(anotherShardID)
@@ -85,14 +91,20 @@ func TestNodeListeningShards(t *testing.T) {
 	if node.IsShardListened(testingShardID) {
 		t.Errorf("Shard %v should have been unlistened", testingShardID)
 	}
-	if _, prs := node.ShardProtocols[testingShardID]; prs {
-		t.Errorf("ShardProtocol[%v] should exist", testingShardID)
+	if node.IsShardCollationsSubscribed(testingShardID) {
+		t.Errorf(
+			"shardCollations in shard [%v] should be already unsubscribed",
+			testingShardID,
+		)
 	}
 	node.UnlistenShard(testingShardID) // ensure no side effect
 }
 
 func TestPeerListeningShards(t *testing.T) {
-	node := makeUnbootstrappedNode(t, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	node := makeUnbootstrappedNode(t, ctx, 0)
 	arbitraryPeerID := peer.ID("123456")
 	if node.IsPeer(arbitraryPeerID) {
 		t.Errorf(
@@ -182,17 +194,18 @@ func connect(t *testing.T, a, b host.Host) {
 	}
 }
 
-func makeNodes(t *testing.T, number int) []*Node {
+func makeNodes(t *testing.T, ctx context.Context, number int) []*Node {
 	nodes := make([]*Node, number)
 	for i := 0; i < number; i++ {
-		nodes = append(nodes, makeUnbootstrappedNode(t, i))
+		nodes = append(nodes, makeUnbootstrappedNode(t, ctx, i))
 	}
 	return nodes
 }
 
-func makePeerNodes(t *testing.T) (*Node, *Node) {
-	node0 := makeUnbootstrappedNode(t, 0)
-	node1 := makeUnbootstrappedNode(t, 1)
+func makePeerNodes(t *testing.T, ctx context.Context) (*Node, *Node) {
+
+	node0 := makeUnbootstrappedNode(t, ctx, 0)
+	node1 := makeUnbootstrappedNode(t, ctx, 1)
 	// if node0.IsPeer(node1.ID()) || node1.IsPeer(node0.ID()) {
 	// 	t.Error("Two initial nodes should not be connected without `AddPeer`")
 	// }
@@ -207,13 +220,18 @@ func makePeerNodes(t *testing.T) (*Node, *Node) {
 }
 
 func TestAddPeer(t *testing.T) {
-	makePeerNodes(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	makePeerNodes(t, ctx)
 }
 
 func TestSendCollation(t *testing.T) {
-	log.Println("123")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	time.Sleep(time.Millisecond * 100)
-	node0, node1 := makePeerNodes(t)
+	node0, node1 := makePeerNodes(t, ctx)
 	var testingShardID ShardIDType = 42
 	node0.ListenShard(testingShardID)
 	// TODO: fail: if the receiver didn't subscribe the shard, it should ignore the message
@@ -234,51 +252,44 @@ func TestSendCollation(t *testing.T) {
 	time.Sleep(time.Millisecond * 100)
 }
 
-func makePartiallyConnected3Nodes(t *testing.T) []*Node {
-	node0, node1 := makePeerNodes(t)
-	node2 := makeUnbootstrappedNode(t, 2)
+func makePartiallyConnected3Nodes(t *testing.T, ctx context.Context) []*Node {
+	node0, node1 := makePeerNodes(t, ctx)
+	node2 := makeUnbootstrappedNode(t, ctx, 2)
 	node2.AddPeer(node1.GetFullAddr())
 	connect(t, node1, node2)
 	return [](*Node){node0, node1, node2}
 }
 
 func TestRouting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// set the logger to DEBUG, to see the process of dht.FindPeer
 	// we should be able to see something like
 	// "dht: FindPeer <peer.ID d3wzD2> true routed.go:76", if successfully found the desire peer
-	node0 := makeUnbootstrappedNode(t, 0)
-	node1 := makeUnbootstrappedNode(t, 1)
-	node2 := makeUnbootstrappedNode(t, 2)
-	node1.AddPeer(node0.GetFullAddr())
-	var testingShardID ShardIDType = 12
-	node0.ListenShard(testingShardID)
-	node1.ListenShard(testingShardID)
-	node2.ListenShard(testingShardID)
-	req := &pbmsg.Collation{
-		ShardID: testingShardID,
-		Number:  1,
-		Blobs:   "123",
-	}
-	node1.ShardProtocols[testingShardID].sendCollationMessage(node2.ID(), req)
-	time.Sleep(time.Millisecond * 1000)
-	// node1 <-> node0 <-> node2
-	node0.AddPeer(node2.GetFullAddr())
-	if node1.IsPeer(node2.ID()) {
+	node0 := makeUnbootstrappedNode(t, ctx, 0)
+	node1 := makeUnbootstrappedNode(t, ctx, 1)
+	node2 := makeUnbootstrappedNode(t, ctx, 2)
+	node0.AddPeer(node1.GetFullAddr())
+	// node0 <-> node1 <-> node2
+	node1.AddPeer(node2.GetFullAddr())
+	if node0.IsPeer(node2.ID()) {
 		t.Error("node1 should not be able to reach node2 before routing")
 	}
-	node1.ShardProtocols[testingShardID].sendCollationMessage(node2.ID(), req)
-	<-node2.ShardProtocols[testingShardID].done
-	if !node1.IsPeer(node2.ID()) {
-		t.Error("node1 should be able a peer of node2 now")
+	piNode2 := node0.Peerstore().PeerInfo(node2.ID())
+	node0.Connect(context.Background(), piNode2)
+	if !node2.IsPeer(node0.ID()) {
+		t.Error("node1 should be a peer of node2 now")
 	}
 }
 
 func TestPubSub(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	nodes := makePartiallyConnected3Nodes(t)
+	nodes := makePartiallyConnected3Nodes(t, ctx)
 
-	topic := "interestedShards"
+	topic := "iamtopic"
 
 	subch0, err := nodes[0].Floodsub.Subscribe(topic)
 	if err != nil {
@@ -304,7 +315,10 @@ func TestPubSub(t *testing.T) {
 }
 
 func TestPubSubNotifyListeningShards(t *testing.T) {
-	nodes := makePartiallyConnected3Nodes(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	nodes := makePartiallyConnected3Nodes(t, ctx)
 
 	listeningShards := NewListeningShards()
 	// ensure notifyShards message is propagated through node1
@@ -321,9 +335,15 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 		t.Error()
 	}
 	nodes[1].PublishListeningShards(listeningShards)
-	time.Sleep(time.Millisecond * 100)
-	if len(nodes[2].GetPeersInShard(42)) != 2 {
-		t.Error()
+	time.Sleep(time.Millisecond * 1000)
+	shardPeers42 := nodes[2].GetNodesInShard(42)
+	if len(shardPeers42) != 2 {
+		t.Errorf(
+			"len(shardPeers42) should be %v, not %v. shardPeers42=%v",
+			2,
+			len(shardPeers42),
+			shardPeers42,
+		)
 	}
 
 	// test unsetShard with notifying
@@ -336,12 +356,15 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 }
 
 func TestPubSubDuplicateMessages(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
-	nodes := makePartiallyConnected3Nodes(t)
+	nodes := makePartiallyConnected3Nodes(t, ctx)
 	// 0 - 1 - 2 - 3
 	//  \          /
 	//   \________/
-	nodes = append(nodes, makeTestingNode(t, 3, []pstore.PeerInfo{}))
+	nodes = append(nodes, makeTestingNode(t, ctx, 3, []pstore.PeerInfo{}))
 	nodes[2].AddPeer(nodes[3].GetFullAddr())
 	connect(t, nodes[0], nodes[3])
 	connect(t, nodes[0], nodes[2])
@@ -359,17 +382,23 @@ func TestPubSubDuplicateMessages(t *testing.T) {
 
 // test if nodes can find each other with ipfs nodes
 func TestWithIPFSNodesRouting(t *testing.T) {
+	// FIXME: skipped by default, since currently our boostrapping nodes are local ipfs nodes
+	t.Skip()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	ipfsPeer0 := IPFS_PEERS[0]
 	ipfsPeer1 := IPFS_PEERS[1]
 
-	node0 := makeUnbootstrappedNode(t, 0)
+	node0 := makeUnbootstrappedNode(t, ctx, 0)
 	node0.Peerstore().AddAddrs(ipfsPeer0.ID, ipfsPeer0.Addrs, pstore.PermanentAddrTTL)
 	node0.Connect(context.Background(), ipfsPeer0)
 	if len(node0.Network().ConnsToPeer(ipfsPeer0.ID)) == 0 {
 		t.Error()
 	}
-	node1 := makeUnbootstrappedNode(t, 1)
+	node1 := makeUnbootstrappedNode(t, ctx, 1)
 	node1.Peerstore().AddAddrs(ipfsPeer1.ID, ipfsPeer1.Addrs, pstore.PermanentAddrTTL)
 	node1.Connect(context.Background(), ipfsPeer1)
 	if len(node1.Network().ConnsToPeer(ipfsPeer1.ID)) == 0 {
@@ -397,31 +426,31 @@ func TestWithIPFSNodesRouting(t *testing.T) {
 	}
 }
 
-func Test100ShardsSendCollation(t *testing.T) {
-	node0, node1 := makePeerNodes(t)
-	blobSize := 1000000
-	var numCollations ShardIDType = 1
-	for i := ShardIDType(0); i < numShards; i++ {
-		node0.ListenShard(i)
-		node1.ListenShard(i)
-	}
-	// time1 := time.Now()
-	for i := ShardIDType(0); i < numShards; i++ {
-		go func(shardID ShardIDType) {
-			for j := ShardIDType(0); j < numCollations; j++ {
-				node0.ShardProtocols[shardID].sendCollation(
-					node1.ID(),
-					j,
-					string(make([]byte, blobSize)),
-				)
-			}
-		}(i)
-	}
-	for i := ShardIDType(0); i < numShards; i++ {
-		for j := ShardIDType(0); j < numCollations; j++ {
-			<-node1.ShardProtocols[i].done
-		}
-	}
-	// select {}
-	log.Println("done")
-}
+// func Test100ShardsSendCollation(t *testing.T) {
+// 	node0, node1 := makePeerNodes(t)
+// 	blobSize := 1000000
+// 	var numCollations ShardIDType = 1
+// 	for i := ShardIDType(0); i < numShards; i++ {
+// 		node0.ListenShard(i)
+// 		node1.ListenShard(i)
+// 	}
+// 	// time1 := time.Now()
+// 	for i := ShardIDType(0); i < numShards; i++ {
+// 		go func(shardID ShardIDType) {
+// 			for j := ShardIDType(0); j < numCollations; j++ {
+// 				node0.ShardProtocols[shardID].sendCollation(
+// 					node1.ID(),
+// 					j,
+// 					string(make([]byte, blobSize)),
+// 				)
+// 			}
+// 		}(i)
+// 	}
+// 	for i := ShardIDType(0); i < numShards; i++ {
+// 		for j := ShardIDType(0); j < numCollations; j++ {
+// 			<-node1.ShardProtocols[i].done
+// 		}
+// 	}
+// 	// select {}
+// 	log.Println("done")
+// }

@@ -112,7 +112,7 @@ type ShardManager struct {
 
 	Floodsub           *floodsub.PubSub
 	listeningShardsSub *floodsub.Subscription
-	collationSubs      map[ShardIDType]*floodsub.Subscription
+	collationsSubs     map[ShardIDType]*floodsub.Subscription
 
 	peerListeningShards map[peer.ID]*ListeningShards // TODO: handle the case when peer leave
 }
@@ -133,7 +133,7 @@ func NewShardManager(node *Node) *ShardManager {
 		node:                node,
 		Floodsub:            service,
 		listeningShardsSub:  nil,
-		collationSubs:       make(map[ShardIDType]*floodsub.Subscription),
+		collationsSubs:      make(map[ShardIDType]*floodsub.Subscription),
 		peerListeningShards: make(map[peer.ID]*ListeningShards),
 	}
 	p.SubscribeListeningShards()
@@ -265,7 +265,7 @@ func (n *ShardManager) ListenShardCollations(shardID ShardIDType) {
 			if !n.IsShardCollationsSubscribed(shardID) {
 				return
 			}
-			msg, err := n.collationSubs[shardID].Next(ctx)
+			msg, err := n.collationsSubs[shardID].Next(ctx)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -287,8 +287,8 @@ func (n *ShardManager) ListenShardCollations(shardID ShardIDType) {
 }
 
 func (n *ShardManager) IsShardCollationsSubscribed(shardID ShardIDType) bool {
-	_, prs := n.collationSubs[shardID]
-	return prs && (n.collationSubs[shardID] != nil)
+	_, prs := n.collationsSubs[shardID]
+	return prs && (n.collationsSubs[shardID] != nil)
 }
 
 func (n *ShardManager) SubscribeShardCollations(shardID ShardIDType) {
@@ -300,7 +300,7 @@ func (n *ShardManager) SubscribeShardCollations(shardID ShardIDType) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	n.collationSubs[shardID] = collationsSub
+	n.collationsSubs[shardID] = collationsSub
 	log.Printf("Subscribed shard %v", shardID)
 }
 
@@ -340,6 +340,6 @@ func (n *ShardManager) sendCollationMessage(collation *pbmsg.Collation) bool {
 
 func (n *ShardManager) UnsubscribeShardCollations(shardID ShardIDType) {
 	if n.IsShardCollationsSubscribed(shardID) {
-		n.collationSubs[shardID] = nil
+		n.collationsSubs[shardID] = nil
 	}
 }

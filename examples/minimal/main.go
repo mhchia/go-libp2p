@@ -29,7 +29,11 @@ const numShards ShardIDType = 100
 
 // makeNode creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It will use secio if secio is true.
-func makeNode(listenPort int, randseed int64, bootstrapPeers []pstore.PeerInfo) (*Node, error) {
+func makeNode(
+	ctx context.Context,
+	listenPort int,
+	randseed int64,
+	bootstrapPeers []pstore.PeerInfo) (*Node, error) {
 
 	// If the seed is zero, use real cryptographic randomness. Otherwise, use a
 	// deterministic randomness source to make generated keys stay the same
@@ -61,7 +65,6 @@ func makeNode(listenPort int, randseed int64, bootstrapPeers []pstore.PeerInfo) 
 	ps.AddPubKey(pid, priv.GetPublic())
 
 	// Put all this together
-	ctx := context.Background()
 	netw, err := swarm.NewNetwork(ctx, []ma.Multiaddr{maddr}, pid, ps, nil)
 	if err != nil {
 		return nil, err
@@ -132,7 +135,13 @@ func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
 func RunNode(seed int, target string) {
 	listenPort := 10000 + seed
 
-	node, err := makeNode(int(listenPort), int64(seed), []pstore.PeerInfo{})
+	ctx := context.Background()
+	node, err := makeNode(
+		ctx,
+		int(listenPort),
+		int64(seed),
+		[]pstore.PeerInfo{},
+	)
 	log.Println(node.ID())
 	if err != nil {
 		log.Fatal(err)
@@ -152,12 +161,7 @@ func RunNode(seed int, target string) {
 	node.ListenShard(30)
 	node.UnlistenShard(20)
 	log.Println("listeningShards", node.GetListeningShards())
-	targetPeerID, _ := parseAddr(target)
-	node.ShardProtocols[testShardID].sendCollation(
-		targetPeerID,
-		1,
-		"blobssssss",
-	)
+	node.sendCollation(testShardID, 1, "blobssssss")
 	select {}
 }
 
@@ -174,7 +178,8 @@ func main() {
 
 	listenPort := 10000 + *seed
 
-	node, err := makeNode(int(listenPort), *seed, []pstore.PeerInfo{})
+	ctx := context.Background()
+	node, err := makeNode(ctx, int(listenPort), *seed, []pstore.PeerInfo{})
 	log.Println(node.ID())
 	if err != nil {
 		log.Fatal(err)
@@ -182,7 +187,7 @@ func main() {
 
 	time.Sleep(time.Millisecond * 1000)
 
-	var numCollations ShardIDType = 100
+	numCollations := 100
 	var numListeningShards ShardIDType = 1
 	blobSize := 1000000
 	for i := ShardIDType(0); i < numListeningShards; i++ {
@@ -198,14 +203,13 @@ func main() {
 
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
-	targetPeerID, _ := parseAddr(*target)
 	// time1 := time.Now()
 	for i := ShardIDType(0); i < numListeningShards; i++ {
 		go func(shardID ShardIDType) {
-			for j := ShardIDType(0); j < numCollations; j++ {
-				node.ShardProtocols[shardID].sendCollation(
-					targetPeerID,
-					j,
+			for j := 0; j < numCollations; j++ {
+				node.sendCollation(
+					shardID,
+					int64(j),
 					string(make([]byte, blobSize)),
 				)
 			}
