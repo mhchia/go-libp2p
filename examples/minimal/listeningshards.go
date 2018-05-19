@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/golang/protobuf/proto"
 	floodsub "github.com/libp2p/go-floodsub"
 	peer "github.com/libp2p/go-libp2p-peer"
+	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 )
 
-const listeningShardTopic = "listeningShardTopic"
+const listeningShardTopic = "listeningShard"
 
 type ShardIDType = int64
 
@@ -108,10 +110,17 @@ func (ls *ListeningShards) ToBytes() []byte {
 type ShardManager struct {
 	node *Node // local host
 
-	Floodsub *floodsub.PubSub
-	sub      *floodsub.Subscription
+	Floodsub           *floodsub.PubSub
+	listeningShardsSub *floodsub.Subscription
+	collationSubs      map[ShardIDType]*floodsub.Subscription
 
 	peerListeningShards map[peer.ID]*ListeningShards // TODO: handle the case when peer leave
+}
+
+const collationTopicFmt = "shardCollations_%d"
+
+func getCollationsTopic(shardID ShardIDType) string {
+	return fmt.Sprintf(collationTopicFmt, shardID)
 }
 
 func NewShardManager(node *Node) *ShardManager {
@@ -123,10 +132,12 @@ func NewShardManager(node *Node) *ShardManager {
 	p := &ShardManager{
 		node:                node,
 		Floodsub:            service,
-		sub:                 SubscribeShardNotifications(service),
+		listeningShardsSub:  nil,
+		collationSubs:       make(map[ShardIDType]*floodsub.Subscription),
 		peerListeningShards: make(map[peer.ID]*ListeningShards),
 	}
-	p.ListenShardNotifications()
+	p.SubscribeListeningShards()
+	p.ListenListeningShards()
 	return p
 }
 
@@ -197,16 +208,20 @@ func (n *ShardManager) GetPeersInShard(shardID ShardIDType) []peer.ID {
 	return peers
 }
 
+//
 // PubSub related
+//
 
-func (n *ShardManager) ListenShardNotifications() {
+// listeningShards notification
+
+func (n *ShardManager) ListenListeningShards() {
 	ctx := context.Background()
 	go func() {
 		for {
-			if n.sub == nil {
+			if n.listeningShardsSub == nil {
 				return
 			}
-			msg, err := n.sub.Next(ctx)
+			msg, err := n.listeningShardsSub.Next(ctx)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -224,19 +239,107 @@ func (n *ShardManager) ListenShardNotifications() {
 	}()
 }
 
-func SubscribeShardNotifications(pubsub *floodsub.PubSub) *floodsub.Subscription {
-	sub, err := pubsub.Subscribe(listeningShardTopic)
+func (n *ShardManager) SubscribeListeningShards() {
+	listeningShardsSub, err := n.Floodsub.Subscribe(listeningShardTopic)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return sub
+	n.listeningShardsSub = listeningShardsSub
 }
 
-func (n *ShardManager) UnsubscribeShardNotifications() {
-	n.sub = nil
+func (n *ShardManager) UnsubscribeListeningShards() {
+	n.listeningShardsSub = nil
 }
 
-func (n *ShardManager) NotifyListeningShards(listeningShards *ListeningShards) {
+func (n *ShardManager) PublishListeningShards(listeningShards *ListeningShards) {
 	bytes := listeningShards.ToBytes()
 	n.Floodsub.Publish(listeningShardTopic, bytes)
+}
+
+// shard collations
+
+func (n *ShardManager) ListenShardCollations(shardID ShardIDType) {
+	ctx := context.Background()
+	go func() {
+		for {
+			if !n.IsShardCollationsSubscribed(shardID) {
+				return
+			}
+			msg, err := n.collationSubs[shardID].Next(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+			bytes := msg.GetData()
+			collation := pbmsg.Collation{}
+			err = proto.Unmarshal(bytes, &collation)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf(
+				"%v: receive: collation: shardId=%v, number=%v, blobs=%v",
+				n.node.ID(),
+				collation.GetShardID(),
+				collation.GetNumber(),
+				collation.GetBlobs(),
+			)
+		}
+	}()
+}
+
+func (n *ShardManager) IsShardCollationsSubscribed(shardID ShardIDType) bool {
+	_, prs := n.collationSubs[shardID]
+	return prs && (n.collationSubs[shardID] != nil)
+}
+
+func (n *ShardManager) SubscribeShardCollations(shardID ShardIDType) {
+	if n.IsShardCollationsSubscribed(shardID) {
+		return
+	}
+	collationsTopic := getCollationsTopic(shardID)
+	collationsSub, err := n.Floodsub.Subscribe(collationsTopic)
+	if err != nil {
+		log.Fatal(err)
+	}
+	n.collationSubs[shardID] = collationsSub
+	log.Printf("Subscribed shard %v", shardID)
+}
+
+func (n *ShardManager) sendCollation(shardID ShardIDType, number int64, blobs string) bool {
+	if !n.IsShardCollationsSubscribed(shardID) {
+		log.Fatalf("Attempted to send collation in a not subscribed shard %v", shardID)
+		return false
+	}
+	// create message data
+	data := &pbmsg.Collation{
+		ShardID: shardID,
+		Number:  number,
+		Blobs:   blobs,
+	}
+
+	return n.sendCollationMessage(data)
+}
+
+func (n *ShardManager) sendCollationMessage(collation *pbmsg.Collation) bool {
+	if !n.IsShardCollationsSubscribed(collation.GetShardID()) {
+		return false
+	}
+	// bytes := listeningShards.ToBytes()
+	collationsTopic := getCollationsTopic(collation.ShardID)
+	bytes, err := proto.Marshal(collation)
+	if err != nil {
+		log.Fatal(err)
+		return false
+	}
+	err = n.Floodsub.Publish(collationsTopic, bytes)
+	if err != nil {
+		log.Fatal(err)
+		return false
+	}
+	return true
+}
+
+func (n *ShardManager) UnsubscribeShardCollations(shardID ShardIDType) {
+	if n.IsShardCollationsSubscribed(shardID) {
+		n.collationSubs[shardID] = nil
+	}
 }

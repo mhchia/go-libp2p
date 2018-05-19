@@ -216,56 +216,22 @@ func TestSendCollation(t *testing.T) {
 	node0, node1 := makePeerNodes(t)
 	var testingShardID ShardIDType = 42
 	node0.ListenShard(testingShardID)
-	// fail
-	node0.ShardProtocols[testingShardID].sendCollation(
-		node1.ID(),
-		1,
-		"123",
-	)
-	log.Println("1")
+	// TODO: fail: if the receiver didn't subscribe the shard, it should ignore the message
 
 	node1.ListenShard(testingShardID)
-	log.Println("2")
-	// fail: if the collation's shardID does not correspond to the protocol's shardID,
+	// TODO: fail: if the collation's shardID does not correspond to the protocol's shardID,
 	//		 receiver should reject it
-	var notlistenedShardID ShardIDType = 24
-	req := &pbmsg.SendCollationRequest{
-		ShardID: notlistenedShardID,
-		Number:  1,
-		Blobs:   "123",
-	}
-	log.Println("3")
-	s, err := node0.NewStream(
-		context.Background(),
-		node1.ID(),
-		getSendCollationRequestProtocolID(testingShardID),
-	)
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println("4")
-	if !node0.sendProtoMessage(req, s) {
-		t.Errorf("failed to send collation message %v", req)
-	}
-	log.Println("5")
-	if result := <-node1.ShardProtocols[testingShardID].done; result {
-		t.Error("node1 should consider this message wrong")
-	}
-	log.Println("6")
+
 	// success
-	succeed := node0.ShardProtocols[testingShardID].sendCollation(
-		node1.ID(),
+	succeed := node0.sendCollation(
+		testingShardID,
 		1,
 		"123",
 	)
 	if !succeed {
-		t.Error("failed to send collation")
+		t.Errorf("failed to send collation %v, %v, %v", testingShardID, 1, 123)
 	}
-	log.Println("7")
-	if result := <-node1.ShardProtocols[testingShardID].done; !result {
-		t.Error("node1 should consider this message wrong")
-	}
-	log.Println("8")
+	time.Sleep(time.Millisecond * 100)
 }
 
 func makePartiallyConnected3Nodes(t *testing.T) []*Node {
@@ -288,7 +254,7 @@ func TestRouting(t *testing.T) {
 	node0.ListenShard(testingShardID)
 	node1.ListenShard(testingShardID)
 	node2.ListenShard(testingShardID)
-	req := &pbmsg.SendCollationRequest{
+	req := &pbmsg.Collation{
 		ShardID: testingShardID,
 		Number:  1,
 		Blobs:   "123",
@@ -346,7 +312,7 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
 		t.Error()
 	}
-	nodes[0].NotifyListeningShards(listeningShards)
+	nodes[0].PublishListeningShards(listeningShards)
 	time.Sleep(time.Millisecond * 100)
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 1 {
 		t.Error()
@@ -354,7 +320,7 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	if len(nodes[2].GetPeerListeningShard(nodes[0].ID())) != 1 {
 		t.Error()
 	}
-	nodes[1].NotifyListeningShards(listeningShards)
+	nodes[1].PublishListeningShards(listeningShards)
 	time.Sleep(time.Millisecond * 100)
 	if len(nodes[2].GetPeersInShard(42)) != 2 {
 		t.Error()
@@ -362,7 +328,7 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 
 	// test unsetShard with notifying
 	listeningShards.unsetShard(42)
-	nodes[0].NotifyListeningShards(listeningShards)
+	nodes[0].PublishListeningShards(listeningShards)
 	time.Sleep(time.Millisecond * 100)
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
 		t.Error()
@@ -387,7 +353,7 @@ func TestPubSubDuplicateMessages(t *testing.T) {
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
 		t.Error()
 	}
-	nodes[1].NotifyListeningShards(listeningShards)
+	nodes[1].PublishListeningShards(listeningShards)
 	time.Sleep(time.Millisecond * 100)
 }
 

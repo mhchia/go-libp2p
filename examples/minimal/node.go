@@ -79,6 +79,9 @@ func (n *Node) ListenShard(shardID ShardIDType) {
 	if !(n.IsShardListened(shardID)) {
 		n.AddPeerListeningShard(n.ID(), shardID)
 		n.ShardProtocols[shardID] = NewShardProtocol(n, shardID)
+		// shardCollations protocol
+		n.SubscribeShardCollations(shardID)
+		n.ListenShardCollations(shardID)
 	}
 }
 
@@ -89,7 +92,7 @@ func (n *Node) UnlistenShard(shardID ShardIDType) {
 			// s.listeningShards[shardID] = false
 			delete(n.ShardProtocols, shardID)
 		}
-		n.RemoveStreamHandler(getSendCollationRequestProtocolID(shardID))
+		n.RemoveStreamHandler(getCollationProtocolID(shardID))
 	}
 }
 

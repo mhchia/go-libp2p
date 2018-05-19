@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	mrand "math/rand"
+	"time"
 
 	golog "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
@@ -179,9 +180,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	time.Sleep(time.Millisecond * 1000)
+
 	var numCollations ShardIDType = 100
+	var numListeningShards ShardIDType = 1
 	blobSize := 1000000
-	for i := ShardIDType(0); i < numShards; i++ {
+	for i := ShardIDType(0); i < numListeningShards; i++ {
 		node.ListenShard(i)
 	}
 
@@ -190,11 +194,13 @@ func main() {
 		select {} // hang forever
 	}
 
+	time.Sleep(time.Millisecond * 5000)
+
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
 	targetPeerID, _ := parseAddr(*target)
 	// time1 := time.Now()
-	for i := ShardIDType(0); i < numShards; i++ {
+	for i := ShardIDType(0); i < numListeningShards; i++ {
 		go func(shardID ShardIDType) {
 			for j := ShardIDType(0); j < numCollations; j++ {
 				node.ShardProtocols[shardID].sendCollation(

@@ -20,35 +20,34 @@ import (
 )
 
 // pattern: /protocol-name/request-or-response-message/version
-const sendCollationRequestFmt = "/sendCollation%d/request/0.0.1"
+const collationProtocolFmt = "/sendCollation%d/request/0.0.1"
 
 const hashLength = 32
 
 // ShardProtocol type
 type ShardProtocol struct {
-	node    *Node       // local host
-	shardID ShardIDType // TODO: should be changed to `listeningShardIDs`
-	// requests map[string]*pbmsg.SendCollationRequest // used to access request data from response handlers
-	receivedCollations map[string]*pbmsg.SendCollationRequest
+	node               *Node       // local host
+	shardID            ShardIDType // TODO: should be changed to `listeningShardIDs`
+	receivedCollations map[string]*pbmsg.Collation
 	done               chan bool // only for demo purposes to stop main from terminating
 }
 
-func getSendCollationRequestProtocolID(shardID ShardIDType) protocol.ID {
-	return protocol.ID(fmt.Sprintf(sendCollationRequestFmt, shardID))
+func getCollationProtocolID(shardID ShardIDType) protocol.ID {
+	return protocol.ID(fmt.Sprintf(collationProtocolFmt, shardID))
 }
 
 func NewShardProtocol(node *Node, shardID ShardIDType) *ShardProtocol {
 	p := &ShardProtocol{
 		node:               node,
 		shardID:            shardID,
-		receivedCollations: make(map[string]*pbmsg.SendCollationRequest),
+		receivedCollations: make(map[string]*pbmsg.Collation),
 		done:               make(chan bool),
 	}
-	node.SetStreamHandler(getSendCollationRequestProtocolID(shardID), p.receiveCollationRequest)
+	node.SetStreamHandler(getCollationProtocolID(shardID), p.receiveCollationRequest)
 	return p
 }
 
-func Hash(msg *pbmsg.SendCollationRequest) string {
+func Hash(msg *pbmsg.Collation) string {
 	dataInBytes, err := proto.Marshal(msg)
 	if err != nil {
 		log.Printf("Error occurs when hashing %v", msg)
@@ -60,7 +59,7 @@ func Hash(msg *pbmsg.SendCollationRequest) string {
 func (p *ShardProtocol) receiveCollationRequest(s inet.Stream) {
 	// reject if the sender is not a peer
 	// TODO: confirm it works
-	data := &pbmsg.SendCollationRequest{}
+	data := &pbmsg.Collation{}
 	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(s))
 	err := decoder.Decode(data)
 	if err != nil {
@@ -71,7 +70,7 @@ func (p *ShardProtocol) receiveCollationRequest(s inet.Stream) {
 	// reject if the node isn't listening to the shard
 	if !p.node.IsShardListened(data.ShardID) {
 		log.Printf(
-			"%s: Rejected sendCollationRequest %v of not listening shard %v",
+			"%s: Rejected collation %v of not listening shard %v",
 			s.Conn().LocalPeer(),
 			data,
 			data.ShardID,
@@ -82,7 +81,7 @@ func (p *ShardProtocol) receiveCollationRequest(s inet.Stream) {
 	// TODO: temporarily comment out, to avoid the excessive memory usage
 	// p.receivedCollations[Hash(data)] = data
 	log.Printf(
-		"%s: Received sendCollationRequest from %s. Message: shardID=%v, number=%v, blobs=%v",
+		"%s: Received collation from %s. Message: shardID=%v, number=%v, blobs=%v",
 		s.Conn().LocalPeer(),
 		s.Conn().RemotePeer(),
 		data.ShardID,
@@ -94,7 +93,7 @@ func (p *ShardProtocol) receiveCollationRequest(s inet.Stream) {
 
 func (p *ShardProtocol) sendCollation(peerID peer.ID, number int64, blobs string) bool {
 	// create message data
-	req := &pbmsg.SendCollationRequest{
+	req := &pbmsg.Collation{
 		ShardID: p.shardID,
 		Number:  number,
 		Blobs:   blobs,
@@ -103,13 +102,13 @@ func (p *ShardProtocol) sendCollation(peerID peer.ID, number int64, blobs string
 	return p.sendCollationMessage(peerID, req)
 }
 
-func (p *ShardProtocol) sendCollationMessage(peerID peer.ID, req *pbmsg.SendCollationRequest) bool {
+func (p *ShardProtocol) sendCollationMessage(peerID peer.ID, req *pbmsg.Collation) bool {
 	log.Printf("%s: Sending collation to: %s....", p.node.ID(), peerID)
 
 	s, err := p.node.NewStream(
 		context.Background(),
 		peerID,
-		getSendCollationRequestProtocolID(p.shardID),
+		getCollationProtocolID(p.shardID),
 	)
 	if err != nil {
 		log.Println(err)
