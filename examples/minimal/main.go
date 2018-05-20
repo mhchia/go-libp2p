@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	mrand "math/rand"
 	"time"
 
@@ -98,7 +99,7 @@ func makeNode(
 	}
 
 	// Make a host that listens on the given multiaddress
-	node := NewNode(routedHost, ctx)
+	node := NewNode(ctx, routedHost)
 
 	log.Printf("I am %s\n", node.GetFullAddr())
 
@@ -185,11 +186,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	time.Sleep(time.Millisecond * 1000)
-
 	numCollations := 100
-	var numListeningShards ShardIDType = 1
-	blobSize := 1000000
+	var numListeningShards ShardIDType = 100
+	blobSize := int(math.Pow(2, 19)) // 1 MB
 	for i := ShardIDType(0); i < numListeningShards; i++ {
 		node.ListenShard(i)
 	}
@@ -199,10 +198,11 @@ func main() {
 		select {} // hang forever
 	}
 
-	time.Sleep(time.Millisecond * 5000)
-
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
+
+	time.Sleep(time.Millisecond * 500)
+
 	// time1 := time.Now()
 	for i := ShardIDType(0); i < numListeningShards; i++ {
 		go func(shardID ShardIDType) {

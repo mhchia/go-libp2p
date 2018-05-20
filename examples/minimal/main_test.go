@@ -5,12 +5,10 @@ import (
 	"testing"
 	"time"
 
-	golog "github.com/ipfs/go-log"
 	host "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
-	gologging "github.com/whyrusleeping/go-logging"
 )
 
 func makeUnbootstrappedNode(t *testing.T, ctx context.Context, number int) *Node {
@@ -335,7 +333,7 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 		t.Error()
 	}
 	nodes[1].PublishListeningShards(listeningShards)
-	time.Sleep(time.Millisecond * 1000)
+	time.Sleep(time.Millisecond * 100)
 	shardPeers42 := nodes[2].GetNodesInShard(42)
 	if len(shardPeers42) != 2 {
 		t.Errorf(
@@ -359,7 +357,7 @@ func TestPubSubDuplicateMessages(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
+	// golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	nodes := makePartiallyConnected3Nodes(t, ctx)
 	// 0 - 1 - 2 - 3
 	//  \          /
@@ -388,7 +386,7 @@ func TestWithIPFSNodesRouting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
+	// golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
 	ipfsPeer0 := IPFS_PEERS[0]
 	ipfsPeer1 := IPFS_PEERS[1]
 

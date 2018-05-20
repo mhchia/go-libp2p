@@ -30,11 +30,11 @@ type Node struct {
 }
 
 // Create a new node with its implemented protocols
-func NewNode(host host.Host, ctx context.Context) *Node {
+func NewNode(ctx context.Context, host host.Host) *Node {
 	node := &Node{Host: host}
 	node.AddPeerProtocol = NewAddPeerProtocol(node)
 
-	node.ShardManager = NewShardManager(node)
+	node.ShardManager = NewShardManager(ctx, node)
 	return node
 }
 
