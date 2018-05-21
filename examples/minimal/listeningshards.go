@@ -8,9 +8,9 @@ import (
 
 	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
-	floodsub "github.com/libp2p/go-floodsub"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
+	floodsub "github.com/mhchia/go-floodsub"
 )
 
 const listeningShardTopic = "listeningShard"
