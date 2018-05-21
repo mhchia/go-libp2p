@@ -188,7 +188,7 @@ func main() {
 
 	numCollations := 100
 	var numListeningShards ShardIDType = 100
-	blobSize := int(math.Pow(2, 19)) // 1 MB
+	blobSize := int(math.Pow(2, 15)) // 1 MB
 	for i := ShardIDType(0); i < numListeningShards; i++ {
 		node.ListenShard(i)
 	}
@@ -201,7 +201,7 @@ func main() {
 	/**** This is where the listener code ends ****/
 	node.AddPeer(*target)
 
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Millisecond * 1000)
 
 	// time1 := time.Now()
 	for i := ShardIDType(0); i < numListeningShards; i++ {
@@ -212,6 +212,9 @@ func main() {
 					int64(j),
 					string(make([]byte, blobSize)),
 				)
+				// TODO: this sleep is needed, to control the speed of sending collations
+				//		 and to avoid
+				time.Sleep(time.Millisecond * 70)
 			}
 		}(i)
 	}

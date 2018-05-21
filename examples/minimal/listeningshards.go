@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
 	floodsub "github.com/libp2p/go-floodsub"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -114,6 +116,8 @@ type ShardManager struct {
 	Floodsub            *floodsub.PubSub
 	listeningShardsSub  *floodsub.Subscription
 	shardCollationsSubs map[ShardIDType]*floodsub.Subscription
+	collations          map[string]struct{}
+	lock                sync.Mutex
 
 	peerListeningShards map[peer.ID]*ListeningShards // TODO: handle the case when peer leave
 }
@@ -134,6 +138,8 @@ func NewShardManager(ctx context.Context, node *Node) *ShardManager {
 		Floodsub:            service,
 		listeningShardsSub:  nil,
 		shardCollationsSubs: make(map[ShardIDType]*floodsub.Subscription),
+		collations:          make(map[string]struct{}),
+		lock:                sync.Mutex{},
 		peerListeningShards: make(map[peer.ID]*ListeningShards),
 	}
 	p.SubscribeListeningShards()
@@ -267,6 +273,14 @@ func (n *ShardManager) PublishListeningShards(listeningShards *ListeningShards) 
 
 // shard collations
 
+func Hash(msg *pbmsg.Collation) string {
+	dataInBytes, err := proto.Marshal(msg)
+	if err != nil {
+		log.Printf("Error occurs when hashing %v", msg)
+	}
+	return string(gethcrypto.Keccak256(dataInBytes))
+}
+
 func (n *ShardManager) ListenShardCollations(shardID ShardIDType) {
 	if !n.IsShardCollationsSubscribed(shardID) {
 		return
@@ -289,6 +303,11 @@ func (n *ShardManager) ListenShardCollations(shardID ShardIDType) {
 			}
 			// TODO: need some check against collations
 			// TODO: do something(store the hash?)
+			collationHash := Hash(&collation)
+			n.lock.Lock()
+			n.collations[collationHash] = struct{}{}
+			log.Printf("!@# current numCollations=%d", len(n.collations))
+			n.lock.Unlock()
 			log.Printf(
 				"%v: receive: collation: shardId=%v, number=%v, blobs=%v",
 				n.node.ID(),
