@@ -175,6 +175,7 @@ func main() {
 	// Parse options from the command line
 	target := flag.String("d", "", "target peer to dial")
 	seed := flag.Int64("seed", 0, "set random seed for id generation")
+	sendCollation := flag.Bool("send", false, "send collations")
 	flag.Parse()
 
 	listenPort := 10000 + *seed
@@ -188,20 +189,23 @@ func main() {
 
 	numCollations := 100
 	var numListeningShards ShardIDType = 100
-	blobSize := int(math.Pow(2, 15)) // 1 MB
+	blobSize := int(math.Pow(2, 20) - 100) // roughly 1 MB
 	for i := ShardIDType(0); i < numListeningShards; i++ {
 		node.ListenShard(i)
 	}
 
-	if *target == "" {
+	if *target != "" {
+		node.AddPeer(*target)
+	}
+
+	if !(*sendCollation) {
 		log.Println("listening for connections")
 		select {} // hang forever
 	}
 
 	/**** This is where the listener code ends ****/
-	node.AddPeer(*target)
 
-	time.Sleep(time.Millisecond * 1000)
+	time.Sleep(time.Millisecond * 300)
 
 	// time1 := time.Now()
 	for i := ShardIDType(0); i < numListeningShards; i++ {
