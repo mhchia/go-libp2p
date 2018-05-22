@@ -7,6 +7,8 @@ import (
 	"log"
 	"math"
 	mrand "math/rand"
+	"strconv"
+	"strings"
 	"time"
 
 	golog "github.com/ipfs/go-log"
@@ -175,7 +177,8 @@ func main() {
 	// Parse options from the command line
 	target := flag.String("d", "", "target peer to dial")
 	seed := flag.Int64("seed", 0, "set random seed for id generation")
-	sendCollation := flag.Bool("send", false, "send collations")
+	sendCollationOption := flag.String("send", "", "send collations")
+	peerToFind := flag.String("find", "", "use dht to find a certain peer with the given peerID")
 	flag.Parse()
 
 	listenPort := 10000 + *seed
@@ -187,32 +190,62 @@ func main() {
 		log.Fatal(err)
 	}
 
-	numCollations := 100
+	if *target != "" {
+		node.AddPeer(*target)
+		time.Sleep(time.Millisecond * 1000)
+	}
+
+	if *peerToFind != "" {
+		peerID, err := peer.IDB58Decode(*peerToFind)
+		if err != nil {
+			log.Printf("[ERROR] error parsing peerID in multihash %v", *peerToFind)
+		}
+		pi := pstore.PeerInfo{
+			ID:    peerID,
+			Addrs: []ma.Multiaddr{},
+		}
+		t := time.Now()
+		err = node.Connect(context.Background(), pi)
+		if err != nil {
+			log.Printf("Failed to connect %v", pi.ID)
+		} else {
+			log.Printf("node.Connect takes %v", time.Since(t))
+		}
+	}
+
 	var numListeningShards ShardIDType = 100
-	blobSize := int(math.Pow(2, 20) - 100) // roughly 1 MB
 	for i := ShardIDType(0); i < numListeningShards; i++ {
 		node.ListenShard(i)
 	}
 
-	if *target != "" {
-		node.AddPeer(*target)
-	}
-
-	if !(*sendCollation) {
+	if *sendCollationOption == "" {
 		log.Println("listening for connections")
 		select {} // hang forever
 	}
 
+	options := strings.Split(*sendCollationOption, ",")
+	if len(options) != 2 {
+		log.Fatalf("wrong collation option %v", *sendCollationOption)
+	}
+	numSendShards, err := strconv.Atoi(options[0])
+	if err != nil {
+		log.Fatalf("wrong send shards %v", options)
+	}
+	numCollations, err := strconv.Atoi(options[1])
+	if err != nil {
+		log.Fatalf("wrong send shards %v", options)
+	}
+
+	blobSize := int(math.Pow(2, 20) - 100) // roughly 1 MB
+
 	/**** This is where the listener code ends ****/
 
-	time.Sleep(time.Millisecond * 300)
-
 	// time1 := time.Now()
-	for i := ShardIDType(0); i < numListeningShards; i++ {
-		go func(shardID ShardIDType) {
+	for i := 0; i < numSendShards; i++ {
+		go func(shardID int) {
 			for j := 0; j < numCollations; j++ {
 				node.sendCollation(
-					shardID,
+					ShardIDType(shardID),
 					int64(j),
 					string(make([]byte, blobSize)),
 				)
