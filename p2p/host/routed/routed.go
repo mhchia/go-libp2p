@@ -61,10 +61,12 @@ func (rh *RoutedHost) Connect(ctx context.Context, pi pstore.PeerInfo) error {
 	if len(addrs) < 1 {
 		// no addrs? find some with the routing system.
 		var err error
+		t := time.Now()
 		addrs, err = rh.findPeerAddrs(ctx, pi.ID)
 		if err != nil {
 			return err
 		}
+		fmt.Printf("\n\nrh.findPeerAddrs takes %v\n\n", time.Since(t))
 	}
 
 	// if we're here, we got some addrs. let's use our wrapped host to connect.
