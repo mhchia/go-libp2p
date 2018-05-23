@@ -129,7 +129,8 @@ func getCollationsTopic(shardID ShardIDType) string {
 }
 
 func NewShardManager(ctx context.Context, node *Node) *ShardManager {
-	service, err := floodsub.NewFloodSub(ctx, node.Host)
+	// service, err := floodsub.NewFloodSub(ctx, node.Host)
+	service, err := floodsub.NewGossipSub(ctx, node.Host)
 	if err != nil {
 		log.Fatalln(err)
 	}
