@@ -59,7 +59,7 @@ func TestNodeListeningShards(t *testing.T) {
 	defer cancel()
 
 	node := makeUnbootstrappedNode(t, ctx, 0)
-	var testingShardID ShardIDType = 87
+	var testingShardID ShardIDType = 42
 	// test `IsShardListened`
 	if node.IsShardListened(testingShardID) {
 		t.Errorf("Shard %v haven't been listened", testingShardID)
@@ -110,7 +110,7 @@ func TestPeerListeningShards(t *testing.T) {
 			arbitraryPeerID,
 		)
 	}
-	var testingShardID ShardIDType = 87
+	var testingShardID ShardIDType = 42
 	if len(node.GetPeerListeningShard(arbitraryPeerID)) != 0 {
 		t.Errorf("Peer %v should not be listening to any shard", arbitraryPeerID)
 	}
@@ -239,7 +239,7 @@ func TestSendCollation(t *testing.T) {
 	//		 receiver should reject it
 
 	// success
-	succeed := node0.sendCollation(
+	succeed := node0.SendCollation(
 		testingShardID,
 		1,
 		"123",
@@ -254,6 +254,7 @@ func makePartiallyConnected3Nodes(t *testing.T, ctx context.Context) []*Node {
 	node0, node1 := makePeerNodes(t, ctx)
 	node2 := makeUnbootstrappedNode(t, ctx, 2)
 	node2.AddPeer(node1.GetFullAddr())
+	<-node2.AddPeerProtocol.done
 	connect(t, node1, node2)
 	return [](*Node){node0, node1, node2}
 }
@@ -289,7 +290,7 @@ func TestPubSub(t *testing.T) {
 
 	topic := "iamtopic"
 
-	subch0, err := nodes[0].Floodsub.Subscribe(topic)
+	subch0, err := nodes[0].pubsubService.Subscribe(topic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +299,7 @@ func TestPubSub(t *testing.T) {
 	time.Sleep(time.Millisecond * 100)
 
 	publishMsg := "789"
-	err = nodes[1].Floodsub.Publish(topic, []byte(publishMsg))
+	err = nodes[1].pubsubService.Publish(topic, []byte(publishMsg))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,31 +354,6 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	}
 }
 
-func TestPubSubDuplicateMessages(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// golog.SetAllLoggers(gologging.DEBUG) // Change to DEBUG for extra info
-	nodes := makePartiallyConnected3Nodes(t, ctx)
-	// 0 - 1 - 2 - 3
-	//  \          /
-	//   \________/
-	nodes = append(nodes, makeTestingNode(t, ctx, 3, []pstore.PeerInfo{}))
-	nodes[2].AddPeer(nodes[3].GetFullAddr())
-	connect(t, nodes[0], nodes[3])
-	connect(t, nodes[0], nodes[2])
-	connect(t, nodes[1], nodes[3])
-	// connect(t, nodes[2], nodes[3])
-
-	listeningShards := NewListeningShards()
-	listeningShards.setShard(42)
-	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
-		t.Error()
-	}
-	nodes[1].PublishListeningShards(listeningShards)
-	time.Sleep(time.Millisecond * 100)
-}
-
 // test if nodes can find each other with ipfs nodes
 func TestWithIPFSNodesRouting(t *testing.T) {
 	// FIXME: skipped by default, since currently our boostrapping nodes are local ipfs nodes
@@ -423,32 +399,3 @@ func TestWithIPFSNodesRouting(t *testing.T) {
 		t.Error()
 	}
 }
-
-// func Test100ShardsSendCollation(t *testing.T) {
-// 	node0, node1 := makePeerNodes(t)
-// 	blobSize := 1000000
-// 	var numCollations ShardIDType = 1
-// 	for i := ShardIDType(0); i < numShards; i++ {
-// 		node0.ListenShard(i)
-// 		node1.ListenShard(i)
-// 	}
-// 	// time1 := time.Now()
-// 	for i := ShardIDType(0); i < numShards; i++ {
-// 		go func(shardID ShardIDType) {
-// 			for j := ShardIDType(0); j < numCollations; j++ {
-// 				node0.ShardProtocols[shardID].sendCollation(
-// 					node1.ID(),
-// 					j,
-// 					string(make([]byte, blobSize)),
-// 				)
-// 			}
-// 		}(i)
-// 	}
-// 	for i := ShardIDType(0); i < numShards; i++ {
-// 		for j := ShardIDType(0); j < numCollations; j++ {
-// 			<-node1.ShardProtocols[i].done
-// 		}
-// 	}
-// 	// select {}
-// 	log.Println("done")
-// }

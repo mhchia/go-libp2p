@@ -1,18 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"log"
 
-	"github.com/gogo/protobuf/proto"
 	host "github.com/libp2p/go-libp2p-host"
-	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
 	ma "github.com/multiformats/go-multiaddr"
-
-	protobufCodec "github.com/multiformats/go-multicodec/protobuf"
 )
 
 // node client version
@@ -23,10 +17,7 @@ type Node struct {
 	host.Host        // lib-p2p host
 	*AddPeerProtocol // addpeer protocol impl
 
-	// Shard related
-	// TODO: maybe move all sharding related things to `ShardManager`?
 	*ShardManager
-	// add other protocols here...
 }
 
 // Create a new node with its implemented protocols
@@ -36,22 +27,6 @@ func NewNode(ctx context.Context, host host.Host) *Node {
 
 	node.ShardManager = NewShardManager(ctx, node)
 	return node
-}
-
-// helper method - writes a protobuf go data object to a network stream
-// data: reference of protobuf go data object to send (not the object itself)
-// s: network stream to write the data to
-func (n *Node) sendProtoMessage(data proto.Message, s inet.Stream) bool {
-	writer := bufio.NewWriter(s)
-	enc := protobufCodec.Multicodec(nil).Encoder(writer)
-	err := enc.Encode(data)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-	writer.Flush()
-	// writer.Flush()
-	return true
 }
 
 func (n *Node) GetFullAddr() string {
@@ -71,40 +46,4 @@ func (n *Node) IsPeer(peerID peer.ID) bool {
 		}
 	}
 	return false
-}
-
-func (n *Node) ListenShard(shardID ShardIDType) {
-	if !(n.IsShardListened(shardID)) {
-		n.AddPeerListeningShard(n.ID(), shardID)
-
-		// shardCollations protocol
-		n.SubscribeShardCollations(shardID)
-		n.ListenShardCollations(shardID)
-	}
-}
-
-func (n *Node) UnlistenShard(shardID ShardIDType) {
-	if n.IsShardListened(shardID) {
-		n.RemovePeerListeningShard(n.ID(), shardID)
-
-		// shardCollations protocol
-		n.UnsubscribeShardCollations(shardID)
-	}
-}
-
-func (n *Node) GetListeningShards() []ShardIDType {
-	return n.GetPeerListeningShard(n.ID())
-}
-
-func InShards(shardID ShardIDType, shards []ShardIDType) bool {
-	for _, value := range shards {
-		if value == shardID {
-			return true
-		}
-	}
-	return false
-}
-
-func (n *Node) IsShardListened(shardID ShardIDType) bool {
-	return InShards(shardID, n.GetListeningShards())
 }

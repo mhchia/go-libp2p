@@ -28,6 +28,8 @@ import (
 
 // import "C"
 
+type ShardIDType = int64
+
 const numShards ShardIDType = 100
 
 // makeNode creates a LibP2P host with a random peer ID listening on the
@@ -108,66 +110,6 @@ func makeNode(
 	return node, nil
 }
 
-func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
-	// The following code extracts target's the peer ID from the
-	// given multiaddress
-	ipfsaddr, err := ma.NewMultiaddr(addrString) // ipfsaddr=/ip4/127.0.0.1/tcp/10000/ipfs/QmVmDaabYcS3pn23KaFjkdw6hkReUUma8sBKqSDHrPYPd2
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS) // pid=QmVmDaabYcS3pn23KaFjkdw6hkReUUma8sBKqSDHrPYPd2
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	peerid, err := peer.IDB58Decode(pid) // peerid=<peer.ID VmDaab>
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	// Decapsulate the /ipfs/<peerID> part from the target
-	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
-	targetPeerAddr, _ := ma.NewMultiaddr(
-		fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)),
-	)
-	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
-	return peerid, targetAddr
-}
-
-func RunNode(seed int, target string) {
-	listenPort := 10000 + seed
-
-	ctx := context.Background()
-	node, err := makeNode(
-		ctx,
-		int(listenPort),
-		int64(seed),
-		[]pstore.PeerInfo{},
-	)
-	log.Println(node.ID())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	testShardID := ShardIDType(87)
-	node.ListenShard(testShardID)
-
-	if target == "" {
-		log.Println("listening for connections")
-		select {} // hang forever
-	}
-
-	/**** This is where the listener code ends ****/
-	node.AddPeer(target)
-	node.ListenShard(20)
-	node.ListenShard(30)
-	node.UnlistenShard(20)
-	log.Println("listeningShards", node.GetListeningShards())
-	node.sendCollation(testShardID, 1, "blobssssss")
-	select {}
-}
-
 func main() {
 	// LibP2P code uses golog to log messages. They log with different
 	// string IDs (i.e. "swarm"). We can control the verbosity level for
@@ -240,17 +182,15 @@ func main() {
 
 	/**** This is where the listener code ends ****/
 
-	// time1 := time.Now()
 	for i := 0; i < numSendShards; i++ {
 		go func(shardID int) {
 			for j := 0; j < numCollations; j++ {
-				node.sendCollation(
+				node.SendCollation(
 					ShardIDType(shardID),
 					int64(j),
 					string(make([]byte, blobSize)),
 				)
-				// TODO: this sleep is needed, to control the speed of sending collations
-				//		 and to avoid
+				// TODO: control the speed of sending collations
 				time.Sleep(time.Millisecond * 70)
 			}
 		}(i)

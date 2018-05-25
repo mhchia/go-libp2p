@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gogo/protobuf/proto"
 	inet "github.com/libp2p/go-libp2p-net"
+	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 
 	pbmsg "github.com/libp2p/go-libp2p/examples/minimal/pb"
 
+	ma "github.com/multiformats/go-multiaddr"
 	protobufCodec "github.com/multiformats/go-multicodec/protobuf"
 )
 
@@ -61,7 +64,7 @@ func (p *AddPeerProtocol) onRequest(s inet.Stream) {
 		return
 	}
 
-	if ok := p.node.sendProtoMessage(resp, s); ok {
+	if ok := sendProtoMessage(resp, s); ok {
 		log.Printf("%s: AddPeer response to %s sent.", s.Conn().LocalPeer().String(), s.Conn().RemotePeer().String())
 	}
 }
@@ -99,7 +102,7 @@ func (p *AddPeerProtocol) AddPeer(peerAddr string) bool {
 		return false
 	}
 
-	if ok := p.node.sendProtoMessage(req, s); !ok {
+	if ok := sendProtoMessage(req, s); !ok {
 		return false
 	}
 
@@ -108,4 +111,50 @@ func (p *AddPeerProtocol) AddPeer(peerAddr string) bool {
 	// log.Printf("%s: AddPeer to: %s was sent. Message Id: %s, Message: %s", p.node.ID(), host.ID(), req.MessageData.Id, req.Message)
 	return true
 
+}
+
+//
+// utils
+//
+
+// helper method - writes a protobuf go data object to a network stream
+// data: reference of protobuf go data object to send (not the object itself)
+// s: network stream to write the data to
+func sendProtoMessage(data proto.Message, s inet.Stream) bool {
+	writer := bufio.NewWriter(s)
+	enc := protobufCodec.Multicodec(nil).Encoder(writer)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+	writer.Flush()
+	return true
+}
+
+func parseAddr(addrString string) (peerID peer.ID, protocolAddr ma.Multiaddr) {
+	// The following code extracts target's the peer ID from the
+	// given multiaddress
+	ipfsaddr, err := ma.NewMultiaddr(addrString) // ipfsaddr=/ip4/127.0.0.1/tcp/10000/ipfs/QmVmDaabYcS3pn23KaFjkdw6hkReUUma8sBKqSDHrPYPd2
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS) // pid=QmVmDaabYcS3pn23KaFjkdw6hkReUUma8sBKqSDHrPYPd2
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	peerid, err := peer.IDB58Decode(pid) // peerid=<peer.ID VmDaab>
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// Decapsulate the /ipfs/<peerID> part from the target
+	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
+	targetPeerAddr, _ := ma.NewMultiaddr(
+		fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)),
+	)
+	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
+	return peerid, targetAddr
 }
