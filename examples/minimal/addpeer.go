@@ -48,14 +48,29 @@ func (p *AddPeerProtocol) onRequest(s inet.Stream) {
 		return
 	}
 
-	log.Printf("%s: Received addPeer request from %s. Message: %s", s.Conn().LocalPeer(), s.Conn().RemotePeer(), data.Message)
+	log.Printf(
+		"%s: Received addPeer request from %s. Message: %s",
+		p.node.Name(),
+		s.Conn().RemotePeer(),
+		data.Message,
+	)
 
 	// generate response message
-	log.Printf("%s: Sending addPeer response to %s", s.Conn().LocalPeer(), s.Conn().RemotePeer())
+	log.Printf(
+		"%s: Sending addPeer response to %s",
+		p.node.Name(),
+		s.Conn().RemotePeer(),
+	)
 
 	resp := &pbmsg.AddPeerResponse{
 		Success: true,
 	}
+
+	p.node.Peerstore().AddAddr(
+		s.Conn().RemotePeer(),
+		s.Conn().RemoteMultiaddr(),
+		pstore.PermanentAddrTTL,
+	)
 
 	// send the response
 	s, respErr := p.node.NewStream(context.Background(), s.Conn().RemotePeer(), addPeerResponse)
@@ -65,7 +80,7 @@ func (p *AddPeerProtocol) onRequest(s inet.Stream) {
 	}
 
 	if ok := sendProtoMessage(resp, s); ok {
-		log.Printf("%s: AddPeer response to %s sent.", s.Conn().LocalPeer().String(), s.Conn().RemotePeer().String())
+		log.Printf("%s: AddPeer response to %s sent.", p.node.Name(), s.Conn().RemotePeer().String())
 	}
 }
 
@@ -80,7 +95,7 @@ func (p *AddPeerProtocol) onResponse(s inet.Stream) {
 
 	log.Printf(
 		"%s: Received addPeer response from %s, result=%v",
-		s.Conn().LocalPeer(),
+		p.node.Name(),
 		s.Conn().RemotePeer(),
 		data.Success,
 	)
@@ -89,11 +104,11 @@ func (p *AddPeerProtocol) onResponse(s inet.Stream) {
 
 func (p *AddPeerProtocol) AddPeer(peerAddr string) bool {
 	peerid, targetAddr := parseAddr(peerAddr)
-	log.Printf("%s: Sending addPeer to: %s....", p.node.ID(), peerid)
+	log.Printf("%s: Sending addPeer to: %s....", p.node.Name(), peerid)
 	p.node.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
 	// create message data
 	req := &pbmsg.AddPeerRequest{
-		Message: fmt.Sprintf("AddPeer from %s", p.node.ID()),
+		Message: fmt.Sprintf("AddPeer from %s", p.node.Name()),
 	}
 
 	s, err := p.node.NewStream(context.Background(), peerid, addPeerRequest)
@@ -108,7 +123,7 @@ func (p *AddPeerProtocol) AddPeer(peerAddr string) bool {
 
 	// store ref request so response handler has access to it
 	// p.requests[req.MessageData.Id] = req
-	// log.Printf("%s: AddPeer to: %s was sent. Message Id: %s, Message: %s", p.node.ID(), host.ID(), req.MessageData.Id, req.Message)
+	// log.Printf("%s: AddPeer to: %s was sent. Message Id: %s, Message: %s", p.node.Name(), host.Name(), req.MessageData.Id, req.Message)
 	return true
 
 }

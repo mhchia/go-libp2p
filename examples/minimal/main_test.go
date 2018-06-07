@@ -255,6 +255,9 @@ func makePartiallyConnected3Nodes(t *testing.T, ctx context.Context) []*Node {
 	node2 := makeUnbootstrappedNode(t, ctx, 2)
 	node2.AddPeer(node1.GetFullAddr())
 	<-node2.AddPeerProtocol.done
+	if !node1.IsPeer(node2.ID()) || !node2.IsPeer(node1.ID()) {
+		t.Error()
+	}
 	connect(t, node1, node2)
 	return [](*Node){node0, node1, node2}
 }
@@ -319,13 +322,14 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 
 	nodes := makePartiallyConnected3Nodes(t, ctx)
 
-	listeningShards := NewListeningShards()
+	// wait for heartbeats to build mesh
+	time.Sleep(time.Second * 2)
+
 	// ensure notifyShards message is propagated through node1
-	listeningShards.setShard(42)
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
 		t.Error()
 	}
-	nodes[0].PublishListeningShards(listeningShards)
+	nodes[0].ListenShard(42)
 	time.Sleep(time.Millisecond * 100)
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 1 {
 		t.Error()
@@ -333,7 +337,8 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	if len(nodes[2].GetPeerListeningShard(nodes[0].ID())) != 1 {
 		t.Error()
 	}
-	nodes[1].PublishListeningShards(listeningShards)
+	nodes[1].ListenShard(42)
+
 	time.Sleep(time.Millisecond * 100)
 	shardPeers42 := nodes[2].GetNodesInShard(42)
 	if len(shardPeers42) != 2 {
@@ -346,8 +351,7 @@ func TestPubSubNotifyListeningShards(t *testing.T) {
 	}
 
 	// test unsetShard with notifying
-	listeningShards.unsetShard(42)
-	nodes[0].PublishListeningShards(listeningShards)
+	nodes[0].UnlistenShard(42)
 	time.Sleep(time.Millisecond * 100)
 	if len(nodes[1].GetPeerListeningShard(nodes[0].ID())) != 0 {
 		t.Error()

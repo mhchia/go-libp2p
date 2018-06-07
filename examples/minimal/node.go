@@ -18,15 +18,22 @@ type Node struct {
 	*AddPeerProtocol // addpeer protocol impl
 
 	*ShardManager
+
+	number int
 }
 
 // Create a new node with its implemented protocols
-func NewNode(ctx context.Context, host host.Host) *Node {
-	node := &Node{Host: host}
+func NewNode(ctx context.Context, host host.Host, number int) *Node {
+	node := &Node{Host: host, number: number}
 	node.AddPeerProtocol = NewAddPeerProtocol(node)
 
 	node.ShardManager = NewShardManager(ctx, node)
 	return node
+}
+
+func (n *Node) Name() string {
+	id := n.ID().Pretty()
+	return fmt.Sprintf("<Node %d %s>", n.number, id[2:8])
 }
 
 func (n *Node) GetFullAddr() string {

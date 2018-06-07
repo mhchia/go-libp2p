@@ -112,10 +112,19 @@ func (n *ShardManager) GetNodesInShard(shardID ShardIDType) []peer.ID {
 
 // listen/unlisten shards
 
-func (n *ShardManager) connectShard(shardID ShardIDType) error {
+func (n *ShardManager) connectShardNodes(shardID ShardIDType) error {
 	peerIDs := n.GetNodesInShard(shardID)
 	pinfos := []pstore.PeerInfo{}
 	for _, peerID := range peerIDs {
+		// don't connect ourselves
+		if peerID == n.node.ID() {
+			continue
+		}
+		// if already have conns, no need to add them
+		connsToPeer := n.node.Network().ConnsToPeer(peerID)
+		if len(connsToPeer) != 0 {
+			continue
+		}
 		pi := n.node.Peerstore().PeerInfo(peerID)
 		pinfos = append(pinfos, pi)
 	}
@@ -130,9 +139,9 @@ func (n *ShardManager) ListenShard(shardID ShardIDType) {
 	n.AddPeerListeningShard(n.node.ID(), shardID)
 
 	// listeningShards protocol
-	n.connectShard(shardID)
-	selfListeningShards := n.peerListeningShards[n.node.ID()]
-	n.PublishListeningShards(selfListeningShards)
+	// TODO: maybe need refactoring
+	n.connectShardNodes(shardID)
+	n.PublishListeningShards()
 
 	// shardCollations protocol
 	n.SubscribeShardCollations(shardID)
@@ -145,8 +154,7 @@ func (n *ShardManager) UnlistenShard(shardID ShardIDType) {
 
 		// listeningShards protocol
 		// TODO: some changes to existing peers?
-		selfListeningShards := n.peerListeningShards[n.node.ID()]
-		n.PublishListeningShards(selfListeningShards)
+		n.PublishListeningShards()
 
 		// shardCollations protocol
 		n.UnsubscribeShardCollations(shardID)
@@ -191,15 +199,18 @@ func (n *ShardManager) ListenListeningShards(ctx context.Context) {
 				// log.Print("ListenListeningShards: ", err)
 				return
 			}
+			// TODO: check if `peerID` is the node itself
 			peerID := msg.GetFrom()
-			// TODO: maybe should check if `peerID` is the node itself
+			if peerID == n.node.ID() {
+				continue
+			}
 			listeningShards := ListeningShardsFromBytes(msg.GetData())
 			n.SetPeerListeningShard(peerID, listeningShards.getShards())
 			log.Printf(
 				"%v: receive: peerID=%v, listeningShards=%v",
-				n.node.ID(),
+				n.node.Name(),
 				peerID,
-				listeningShards,
+				listeningShards.getShards(),
 			)
 		}
 	}()
@@ -218,8 +229,10 @@ func (n *ShardManager) UnsubscribeListeningShards() {
 	n.listeningShardsSub = nil
 }
 
-func (n *ShardManager) PublishListeningShards(listeningShards *ListeningShards) {
-	bytes := listeningShards.ToBytes()
+func (n *ShardManager) PublishListeningShards() {
+	selfListeningShards := n.peerListeningShards[n.node.ID()]
+	log.Printf("%v: %v", n.node.Name(), selfListeningShards)
+	bytes := selfListeningShards.ToBytes()
 	n.pubsubService.Publish(listeningShardTopic, bytes)
 }
 
@@ -246,6 +259,11 @@ func (n *ShardManager) ListenShardCollations(shardID ShardIDType) {
 				// log.Print(err)
 				return
 			}
+			// TODO: check if `peerID` is the node itself
+			peerID := msg.GetFrom()
+			if peerID == n.node.ID() {
+				continue
+			}
 			bytes := msg.GetData()
 			collation := pbmsg.Collation{}
 			err = proto.Unmarshal(bytes, &collation)
@@ -257,11 +275,15 @@ func (n *ShardManager) ListenShardCollations(shardID ShardIDType) {
 			collationHash := Hash(&collation)
 			n.lock.Lock()
 			n.collations[collationHash] = struct{}{}
-			log.Printf("!@# current numCollations=%d", len(n.collations))
+			log.Printf(
+				"%v: current numCollations=%d",
+				n.node.Name(),
+				len(n.collations),
+			)
 			n.lock.Unlock()
 			log.Printf(
 				"%v: receive: collation: shardId=%v, number=%v, blobs=%v",
-				n.node.ID(),
+				n.node.Name(),
 				collation.GetShardID(),
 				collation.GetNumber(),
 				collation.GetBlobs(),
